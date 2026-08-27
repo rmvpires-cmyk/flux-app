@@ -38,7 +38,12 @@ body{
 
 a{ color: inherit; }
 
-header{ padding: 24px 20px 8px; }
+header{ padding: 24px 20px 8px; position:relative; }
+.settings-link{
+  position:absolute; top:22px; right:18px;
+  color: var(--ink-soft); padding:6px; display:flex;
+}
+.settings-link svg{ width:20px; height:20px; }
 .eyebrow{
   font-family: var(--font-mono);
   font-size: 11px;

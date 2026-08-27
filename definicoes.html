@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flux — Definições</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="back-link" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Início
+  </a>
+  <div class="greeting" style="margin-top:10px;">Definições</div>
+</header>
+
+<main>
+  <div class="section-head">
+    <div class="section-title">Conta</div>
+  </div>
+  <div class="limit-card">
+    <div class="limit-label">Sessão iniciada como</div>
+    <div id="emailAtual" style="font-size:14px; font-weight:500; margin-top:4px;">—</div>
+  </div>
+
+  <div class="section-head">
+    <div class="section-title">Mudar password</div>
+  </div>
+  <div class="add-form" style="margin-top:0;">
+    <div class="field">
+      <label>Nova password</label>
+      <input type="password" id="novaPassword" minlength="6" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Confirmar nova password</label>
+      <input type="password" id="confirmarPassword" minlength="6" autocomplete="new-password">
+    </div>
+    <p class="empty-note" id="passwordMsg"></p>
+    <div class="add-form-actions" style="justify-content:flex-start;">
+      <button class="btn-small-primary" id="guardarPasswordBtn">Atualizar password</button>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <div class="section-title">Biometria neste aparelho</div>
+  </div>
+  <div class="limit-card">
+    <div class="limit-top">
+      <div>
+        <div class="limit-label">Cadeado por biometria</div>
+        <div id="biometriaEstado" style="font-size:13px; margin-top:4px;">A verificar…</div>
+      </div>
+      <button class="limit-edit-btn" id="biometriaBtn" style="display:none;"></button>
+    </div>
+    <p class="empty-note" style="padding-top:10px;">Pede a tua digital, cara ou PIN deste aparelho sempre que abrires o Flux aqui — não substitui a password da conta, é só um cadeado extra local. Tens de ativar em cada aparelho que uses.</p>
+    <p class="empty-note" id="biometriaMsg" style="color:var(--brick);"></p>
+  </div>
+
+  <div class="section-head">
+    <div class="section-title">Sessão</div>
+  </div>
+  <div class="limit-card">
+    <button class="btn-secondary" id="terminarSessaoBtn" style="width:100%;">Terminar sessão</button>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script>
+  let userIdGlobal = null;
+  let userEmailGlobal = null;
+
+  function atualizarEstadoBiometria(){
+    const estadoEl = document.getElementById('biometriaEstado');
+    const btn = document.getElementById('biometriaBtn');
+
+    if (!fluxBiometriaSuportada()) {
+      estadoEl.textContent = 'Não suportado neste aparelho/browser.';
+      btn.style.display = 'none';
+      return;
+    }
+    const ativa = fluxBiometriaAtiva(userIdGlobal);
+    estadoEl.textContent = ativa ? 'Ativado neste aparelho' : 'Desativado neste aparelho';
+    btn.textContent = ativa ? 'Desativar' : 'Ativar';
+    btn.style.display = '';
+  }
+
+  document.getElementById('biometriaBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('biometriaBtn');
+    const msgEl = document.getElementById('biometriaMsg');
+    msgEl.textContent = '';
+
+    if (fluxBiometriaAtiva(userIdGlobal)) {
+      fluxBiometriaDesativar(userIdGlobal);
+      atualizarEstadoBiometria();
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      await fluxBiometriaAtivar(userIdGlobal, userEmailGlobal);
+      atualizarEstadoBiometria();
+    } catch (e) {
+      msgEl.textContent = 'Não foi possível ativar: ' + (e.message || e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('guardarPasswordBtn').addEventListener('click', async () => {
+    const nova = document.getElementById('novaPassword').value;
+    const confirmar = document.getElementById('confirmarPassword').value;
+    const msgEl = document.getElementById('passwordMsg');
+    msgEl.textContent = '';
+    msgEl.style.color = '';
+
+    if (!nova || nova.length < 6) { msgEl.textContent = 'A password tem de ter pelo menos 6 caracteres.'; msgEl.style.color = 'var(--brick)'; return; }
+    if (nova !== confirmar) { msgEl.textContent = 'As duas passwords não coincidem.'; msgEl.style.color = 'var(--brick)'; return; }
+
+    const btn = document.getElementById('guardarPasswordBtn');
+    btn.disabled = true; btn.textContent = 'A atualizar…';
+    const { error } = await flux.auth.updateUser({ password: nova });
+    btn.disabled = false; btn.textContent = 'Atualizar password';
+
+    if (error) { msgEl.textContent = 'Erro: ' + error.message; msgEl.style.color = 'var(--brick)'; return; }
+    document.getElementById('novaPassword').value = '';
+    document.getElementById('confirmarPassword').value = '';
+    msgEl.textContent = 'Password atualizada.';
+    msgEl.style.color = 'var(--moss)';
+  });
+
+  document.getElementById('terminarSessaoBtn').addEventListener('click', () => {
+    if (confirm('Terminar sessão?')) fluxSignOut();
+  });
+
+  (async () => {
+    userIdGlobal = await fluxRequireSession();
+    if (!userIdGlobal) return;
+    const { data: { user } } = await flux.auth.getUser();
+    userEmailGlobal = user?.email || '';
+    document.getElementById('emailAtual').textContent = userEmailGlobal;
+    atualizarEstadoBiometria();
+  })();
+</script>
+
+</body>
+</html>
