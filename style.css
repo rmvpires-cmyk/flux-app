@@ -126,6 +126,7 @@ main{ padding: 8px 18px 0; }
 .budget-bar-fill{ height: 100%; border-radius: 999px; background: var(--current); }
 .budget-bar-fill.copper{ background: var(--copper); }
 .budget-bar-fill.brick{ background: var(--brick); }
+.budget-bar-fill.moss{ background: var(--moss); }
 
 /* PRÓXIMOS PAGAMENTOS */
 .pay-list{ display:flex; flex-direction:column; gap: 10px; }
@@ -319,6 +320,21 @@ nav.tabbar{
 }
 .subcat-name{ font-size: 14px; font-weight: 500; }
 .subcat-amount{ font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--ink-soft); }
+
+/* RESPONSIVO — mobile mostra mês atual, ecrã largo mostra grelha anual completa */
+.mobile-only{ display:block; }
+.desktop-only{ display:none; }
+@media (min-width: 760px){
+  body{ max-width: 900px; }
+  .mobile-only{ display:none; }
+  .desktop-only{ display:block; }
+  main{ padding: 8px 32px 0; }
+  header{ padding: 24px 32px 8px; }
+  .grid-wrap{ overflow-x: visible; }
+  table.budget-grid{ width: 100%; table-layout: fixed; }
+  table.budget-grid td.cat-name{ position: static; }
+  table.budget-grid th.cat-name-head{ position: static; }
+}
 
 /* GRELHA ANUAL DE ORÇAMENTO */
 .year-nav{

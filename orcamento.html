@@ -13,7 +13,20 @@
 <header>
   <div class="eyebrow">FLUX</div>
   <div class="greeting">Orçamento</div>
-  <div class="year-nav">
+
+  <!-- Telemóvel: navegação por mês -->
+  <div class="month-nav mobile-only" id="mobileNav">
+    <button id="mesAnterior" aria-label="Mês anterior">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <span class="month-label" id="mesLabel"></span>
+    <button id="mesSeguinte" aria-label="Mês seguinte">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+  </div>
+
+  <!-- Ecrã largo: navegação por ano -->
+  <div class="year-nav desktop-only" id="desktopNav">
     <button id="anoAnterior" aria-label="Ano anterior">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
     </button>
@@ -25,14 +38,20 @@
 </header>
 
 <main>
-  <div class="grid-wrap">
+  <!-- Telemóvel: lista do mês selecionado -->
+  <div class="budget-card mobile-only" id="budgetCardMobile" style="margin-top:16px">
+    <div class="empty-note">A carregar…</div>
+  </div>
+
+  <!-- Ecrã largo: grelha anual completa -->
+  <div class="grid-wrap desktop-only" id="gridWrap">
     <table class="budget-grid" id="grid">
       <thead><tr><th class="cat-name-head">Categoria</th></tr></thead>
       <tbody><tr><td class="empty-note">A carregar…</td></tr></tbody>
     </table>
   </div>
 
-  <button class="toggle-add-btn" id="toggleAddBtn">+ Nova categoria</button>
+  <button class="toggle-add-btn" id="toggleAddBtn">+ Nova categoria de despesa</button>
   <div class="add-form" id="addForm" style="display:none">
     <div class="field">
       <label for="novaCatNome">Nome</label>
@@ -55,6 +74,49 @@
     <div class="add-form-actions">
       <button class="btn-secondary" id="cancelarNovaCat">Cancelar</button>
       <button class="btn-small-primary" id="guardarNovaCat">Criar categoria</button>
+    </div>
+  </div>
+
+  <div class="section-head" style="margin-top:34px">
+    <div class="section-title">Receitas</div>
+  </div>
+
+  <!-- Telemóvel: lista de receitas do mês selecionado -->
+  <div class="budget-card mobile-only" id="receitaCardMobile">
+    <div class="empty-note">A carregar…</div>
+  </div>
+
+  <!-- Ecrã largo: grelha anual de receitas -->
+  <div class="grid-wrap desktop-only" id="gridWrapReceitas">
+    <table class="budget-grid" id="gridReceitas">
+      <thead><tr><th class="cat-name-head">Categoria</th></tr></thead>
+      <tbody><tr><td class="empty-note">A carregar…</td></tr></tbody>
+    </table>
+  </div>
+
+  <button class="toggle-add-btn" id="toggleAddReceitaBtn">+ Nova categoria de receita</button>
+  <div class="add-form" id="addFormReceita" style="display:none">
+    <div class="field">
+      <label for="novaReceitaCatNome">Nome</label>
+      <input type="text" id="novaReceitaCatNome" placeholder="ex. Freelance">
+    </div>
+    <div class="field">
+      <label for="novaReceitaCatPrevisto">Previsão mensal por omissão (€)</label>
+      <input type="number" step="0.01" min="0" id="novaReceitaCatPrevisto" placeholder="0.00">
+    </div>
+    <div class="field">
+      <label>Cor</label>
+      <div class="color-swatches" id="corSwatchesReceita">
+        <div class="color-swatch selected" style="background:#4C8C6B" data-cor="#4C8C6B"></div>
+        <div class="color-swatch" style="background:#1F6F78" data-cor="#1F6F78"></div>
+        <div class="color-swatch" style="background:#C97B4A" data-cor="#C97B4A"></div>
+        <div class="color-swatch" style="background:#B5453D" data-cor="#B5453D"></div>
+        <div class="color-swatch" style="background:#4E6167" data-cor="#4E6167"></div>
+      </div>
+    </div>
+    <div class="add-form-actions">
+      <button class="btn-secondary" id="cancelarNovaReceitaCat">Cancelar</button>
+      <button class="btn-small-primary" id="guardarNovaReceitaCat">Criar categoria</button>
     </div>
   </div>
 </main>
@@ -90,9 +152,27 @@
   const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
   const params = new URLSearchParams(window.location.search);
+  const mesParam = params.get('mes'); // 'YYYY-MM', opcional — controla o mês inicial no telemóvel
+
   let anoAtual = parseInt(params.get('ano'), 10);
-  if (!anoAtual || isNaN(anoAtual)) anoAtual = new Date().getFullYear();
+  if (!anoAtual || isNaN(anoAtual)) {
+    anoAtual = mesParam && /^\d{4}-\d{2}$/.test(mesParam) ? parseInt(mesParam.slice(0, 4), 10) : new Date().getFullYear();
+  }
   document.getElementById('anoLabel').textContent = anoAtual;
+
+  const hoje = new Date();
+  let mesSelecionado = (mesParam && /^\d{4}-\d{2}$/.test(mesParam) && mesParam.slice(0, 4) == anoAtual)
+    ? mesParam
+    : (anoAtual === hoje.getFullYear()
+        ? `${anoAtual}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+        : `${anoAtual}-01`);
+
+  function labelDoMes(mesStr) {
+    const [ano, mes] = mesStr.split('-').map(Number);
+    const d = new Date(ano, mes - 1, 1);
+    return d.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+  }
+  document.getElementById('mesLabel').textContent = labelDoMes(mesSelecionado);
 
   document.getElementById('anoAnterior').addEventListener('click', () => {
     window.location.href = `orcamento.html?ano=${anoAtual - 1}`;
@@ -100,18 +180,41 @@
   document.getElementById('anoSeguinte').addEventListener('click', () => {
     window.location.href = `orcamento.html?ano=${anoAtual + 1}`;
   });
+  document.getElementById('mesAnterior').addEventListener('click', () => irParaMes(-1));
+  document.getElementById('mesSeguinte').addEventListener('click', () => irParaMes(1));
+
+  function irParaMes(delta) {
+    const [ano, mes] = mesSelecionado.split('-').map(Number);
+    const d = new Date(ano, mes - 1 + delta, 1);
+    const novoAno = d.getFullYear();
+    const novoMes = `${novoAno}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (novoAno !== anoAtual) {
+      window.location.href = `orcamento.html?ano=${novoAno}&mes=${novoMes}`;
+      return;
+    }
+    mesSelecionado = novoMes;
+    document.getElementById('mesLabel').textContent = labelDoMes(mesSelecionado);
+    renderMobile();
+    renderMobileReceitas();
+  }
 
   let userIdGlobal = null;
+  let categoriasGlobal = [];
+  let excecoesPorCategoriaGlobal = {};
+  let gastoPorCategoriaMesGlobal = {};
+  let receitaCategoriasGlobal = [];
+  let receitaPorCategoriaMesGlobal = {};
+  let previsoesPorCategoriaGlobal = {};
 
-  // Dado um conjunto de exceções (ordenadas por mês) e o limite por omissão,
-  // devolve o limite efetivo para cada um dos 12 meses do ano.
-  function calcularLimitesDoAno(limitePorOmissao, excecoesOrdenadas) {
+  // Genérico: dado um valor por omissão e uma lista de exceções ordenadas por mês
+  // (cada uma com {mes, [campoValor]}), devolve o valor efetivo para cada um dos 12 meses.
+  function calcularValoresDoAno(valorPorOmissao, excecoesOrdenadas, campoValor) {
     const resultado = [];
     for (let m = 0; m < 12; m++) {
       const dataAlvo = `${anoAtual}-${String(m + 1).padStart(2, '0')}-01`;
-      let valor = limitePorOmissao;
+      let valor = valorPorOmissao;
       for (const exc of excecoesOrdenadas) {
-        if (exc.mes <= dataAlvo) valor = Number(exc.limite_mensal);
+        if (exc.mes <= dataAlvo) valor = Number(exc[campoValor]);
         else break;
       }
       resultado.push(valor);
@@ -119,47 +222,63 @@
     return resultado;
   }
 
-  async function carregarGrelha() {
+  async function carregarDados() {
     const userId = userIdGlobal;
     const inicioAno = `${anoAtual}-01-01`;
     const fimAno = `${anoAtual}-12-31`;
 
-    const [{ data: categorias }, { data: excecoes }, { data: despesas }] = await Promise.all([
+    const [{ data: categorias }, { data: excecoes }, { data: despesas }, { data: receitaCategorias }, { data: receitas }, { data: previsoes }] = await Promise.all([
       flux.from('orcamento_categorias').select('id, nome, limite_mensal, cor').eq('user_id', userId).eq('ativa', true).order('nome'),
       flux.from('orcamento_categoria_limites').select('categoria_id, mes, limite_mensal').eq('user_id', userId).order('mes'),
-      flux.from('despesas').select('valor, categoria_id, data').eq('user_id', userId).gte('data', inicioAno).lte('data', fimAno)
+      flux.from('despesas').select('valor, categoria_id, data').eq('user_id', userId).gte('data', inicioAno).lte('data', fimAno),
+      flux.from('receitas_categorias').select('id, nome, cor, valor_previsto').eq('user_id', userId).eq('ativa', true).order('nome'),
+      flux.from('receitas').select('valor, categoria_id, data').eq('user_id', userId).gte('data', inicioAno).lte('data', fimAno),
+      flux.from('receitas_categoria_previsoes').select('categoria_id, mes, valor_previsto').eq('user_id', userId).order('mes')
     ]);
 
-    const grid = document.getElementById('grid');
-    if (!categorias || categorias.length === 0) {
-      grid.querySelector('tbody').innerHTML = '<tr><td class="empty-note">Ainda sem categorias.</td></tr>';
-      return;
-    }
-
-    // gasto por categoria/mês
-    const gastoPorCategoriaMes = {};
+    categoriasGlobal = categorias || [];
+    gastoPorCategoriaMesGlobal = {};
     (despesas || []).forEach(d => {
       const mes = d.data.slice(5, 7);
       const chave = `${d.categoria_id}_${mes}`;
-      gastoPorCategoriaMes[chave] = (gastoPorCategoriaMes[chave] || 0) + Number(d.valor);
+      gastoPorCategoriaMesGlobal[chave] = (gastoPorCategoriaMesGlobal[chave] || 0) + Number(d.valor);
     });
-
-    const excecoesPorCategoria = {};
+    excecoesPorCategoriaGlobal = {};
     (excecoes || []).forEach(e => {
-      if (!excecoesPorCategoria[e.categoria_id]) excecoesPorCategoria[e.categoria_id] = [];
-      excecoesPorCategoria[e.categoria_id].push(e);
+      if (!excecoesPorCategoriaGlobal[e.categoria_id]) excecoesPorCategoriaGlobal[e.categoria_id] = [];
+      excecoesPorCategoriaGlobal[e.categoria_id].push(e);
     });
 
-    let theadRow = '<th class="cat-name-head">Categoria</th>' + MESES_ABREV.map(m => `<th>${m}</th>`).join('');
-    grid.querySelector('thead tr').innerHTML = theadRow;
+    receitaCategoriasGlobal = receitaCategorias || [];
+    receitaPorCategoriaMesGlobal = {};
+    (receitas || []).forEach(r => {
+      const mes = r.data.slice(5, 7);
+      const chave = `${r.categoria_id}_${mes}`;
+      receitaPorCategoriaMesGlobal[chave] = (receitaPorCategoriaMesGlobal[chave] || 0) + Number(r.valor);
+    });
+    previsoesPorCategoriaGlobal = {};
+    (previsoes || []).forEach(p => {
+      if (!previsoesPorCategoriaGlobal[p.categoria_id]) previsoesPorCategoriaGlobal[p.categoria_id] = [];
+      previsoesPorCategoriaGlobal[p.categoria_id].push(p);
+    });
+  }
+
+  function renderDesktopGrid() {
+    const grid = document.getElementById('grid');
+    if (categoriasGlobal.length === 0) {
+      grid.querySelector('tbody').innerHTML = '<tr><td class="empty-note">Ainda sem categorias.</td></tr>';
+      return;
+    }
+    grid.querySelector('thead tr').innerHTML =
+      '<th class="cat-name-head">Categoria</th>' + MESES_ABREV.map(m => `<th>${m}</th>`).join('');
 
     let tbodyHtml = '';
-    categorias.forEach(cat => {
-      const limites = calcularLimitesDoAno(Number(cat.limite_mensal), excecoesPorCategoria[cat.id] || []);
-      let linha = `<tr><td class="cat-name" data-id="${cat.id}" data-mes="${anoAtual}-${String(new Date().getMonth()+1).padStart(2,'0')}">${cat.nome}</td>`;
+    categoriasGlobal.forEach(cat => {
+      const limites = calcularValoresDoAno(Number(cat.limite_mensal), excecoesPorCategoriaGlobal[cat.id] || [], 'limite_mensal');
+      let linha = `<tr><td class="cat-name" data-id="${cat.id}" data-mes="${mesSelecionado}">${cat.nome}</td>`;
       for (let m = 0; m < 12; m++) {
         const mesStr = String(m + 1).padStart(2, '0');
-        const gasto = gastoPorCategoriaMes[`${cat.id}_${mesStr}`] || 0;
+        const gasto = gastoPorCategoriaMesGlobal[`${cat.id}_${mesStr}`] || 0;
         const limite = limites[m];
         const pct = limite > 0 ? (gasto / limite) : (gasto > 0 ? 2 : 0);
         const classe = pct > 1 ? 'over' : (pct >= 0.8 ? 'warn' : '');
@@ -180,11 +299,166 @@
     });
   }
 
+  function renderMobile() {
+    const budgetCard = document.getElementById('budgetCardMobile');
+    if (categoriasGlobal.length === 0) {
+      budgetCard.innerHTML = '<div class="empty-note">Ainda sem categorias.</div>';
+      return;
+    }
+    const mesNum = mesSelecionado.slice(5, 7);
+    budgetCard.innerHTML = categoriasGlobal.map(cat => {
+      const limites = calcularValoresDoAno(Number(cat.limite_mensal), excecoesPorCategoriaGlobal[cat.id] || [], 'limite_mensal');
+      const limite = limites[parseInt(mesNum, 10) - 1];
+      const gasto = gastoPorCategoriaMesGlobal[`${cat.id}_${mesNum}`] || 0;
+      const pct = limite > 0 ? Math.min(100, Math.round((gasto / limite) * 100)) : (gasto > 0 ? 100 : 0);
+      const corClasse = gasto > limite ? 'brick' : (pct >= 80 ? 'copper' : '');
+      return `
+        <a class="budget-row-link" href="orcamento-categoria.html?id=${cat.id}&mes=${mesSelecionado}">
+          <div class="budget-row">
+            <div class="budget-top">
+              <span class="budget-cat">${cat.nome}</span>
+              <span class="budget-amounts">€${euros(gasto)} / €${euros(limite)}</span>
+            </div>
+            <div class="budget-bar-track"><div class="budget-bar-fill ${corClasse}" style="width:${pct}%"></div></div>
+          </div>
+        </a>`;
+    }).join('');
+  }
+
+  function renderDesktopGridReceitas() {
+    const grid = document.getElementById('gridReceitas');
+    if (receitaCategoriasGlobal.length === 0) {
+      grid.querySelector('tbody').innerHTML = '<tr><td class="empty-note">Ainda sem categorias de receita.</td></tr>';
+      return;
+    }
+    grid.querySelector('thead tr').innerHTML =
+      '<th class="cat-name-head">Categoria</th>' + MESES_ABREV.map(m => `<th>${m}</th>`).join('');
+
+    let tbodyHtml = '';
+    receitaCategoriasGlobal.forEach(cat => {
+      const previsoes = calcularValoresDoAno(Number(cat.valor_previsto), previsoesPorCategoriaGlobal[cat.id] || [], 'valor_previsto');
+      let linha = `<tr><td class="cat-name" style="cursor:default">
+          <span>${cat.nome}</span>
+          <span class="row-actions" style="margin-left:8px; display:inline-flex; vertical-align:middle;">
+            <button class="icon-btn edit-receita-cat-btn" data-id="${cat.id}" data-nome="${cat.nome}" data-previsto="${cat.valor_previsto}" aria-label="Editar" style="width:22px;height:22px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="icon-btn danger archive-receita-cat-btn" data-id="${cat.id}" data-nome="${cat.nome}" aria-label="Arquivar" style="width:22px;height:22px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
+            </button>
+          </span>
+        </td>`;
+      for (let m = 0; m < 12; m++) {
+        const mesStr = String(m + 1).padStart(2, '0');
+        const valor = receitaPorCategoriaMesGlobal[`${cat.id}_${mesStr}`] || 0;
+        const previsto = previsoes[m];
+        const pct = previsto > 0 ? (valor / previsto) : (valor > 0 ? 1 : 0);
+        // invertido: abaixo do previsto = alerta; atingiu/ultrapassou = ok
+        const classe = pct < 0.8 ? 'over' : (pct < 1 ? 'warn' : '');
+        linha += `<td class="cell edit-previsao-cell ${classe}" data-id="${cat.id}" data-mes="${anoAtual}-${mesStr}" data-atual="${previsto}">
+          <span class="g">${valor > 0 ? euros(valor) : '–'}</span>
+          <span class="l">/${previsto > 0 ? euros(previsto) : '0'}</span>
+        </td>`;
+      }
+      linha += '</tr>';
+      tbodyHtml += linha;
+    });
+    grid.querySelector('tbody').innerHTML = tbodyHtml;
+    ligarAcoesReceitaCategorias();
+  }
+
+  function renderMobileReceitas() {
+    const card = document.getElementById('receitaCardMobile');
+    if (receitaCategoriasGlobal.length === 0) {
+      card.innerHTML = '<div class="empty-note">Ainda sem categorias de receita.</div>';
+      return;
+    }
+    const mesNum = mesSelecionado.slice(5, 7);
+    card.innerHTML = receitaCategoriasGlobal.map(cat => {
+      const previsoes = calcularValoresDoAno(Number(cat.valor_previsto), previsoesPorCategoriaGlobal[cat.id] || [], 'valor_previsto');
+      const previsto = previsoes[parseInt(mesNum, 10) - 1];
+      const valor = receitaPorCategoriaMesGlobal[`${cat.id}_${mesNum}`] || 0;
+      const pct = previsto > 0 ? Math.min(100, Math.round((valor / previsto) * 100)) : (valor > 0 ? 100 : 0);
+      // invertido: abaixo do previsto = alerta; atingiu/ultrapassou = ok
+      const corClasse = valor >= previsto ? 'moss' : (pct >= 80 ? 'copper' : 'brick');
+      return `
+        <div class="budget-row edit-previsao-cell" data-id="${cat.id}" data-mes="${mesSelecionado}" data-atual="${previsto}" style="cursor:pointer">
+          <div class="budget-top">
+            <span class="budget-cat">${cat.nome}</span>
+            <span class="budget-amounts">€${euros(valor)} / €${euros(previsto)}</span>
+          </div>
+          <div class="budget-bar-track"><div class="budget-bar-fill ${corClasse}" style="width:${pct}%"></div></div>
+          <div class="row-actions" style="margin-top:8px; justify-content:flex-end;">
+            <button class="icon-btn edit-receita-cat-btn" data-id="${cat.id}" data-nome="${cat.nome}" data-previsto="${cat.valor_previsto}" aria-label="Editar categoria">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="icon-btn danger archive-receita-cat-btn" data-id="${cat.id}" data-nome="${cat.nome}" aria-label="Arquivar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+    ligarAcoesReceitaCategorias();
+  }
+
+  function ligarAcoesReceitaCategorias() {
+    document.querySelectorAll('.edit-receita-cat-btn').forEach(btn => {
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const novoNome = prompt('Novo nome da categoria de receita:', btn.dataset.nome);
+        if (!novoNome || !novoNome.trim()) return;
+        const novoPrevistoTexto = prompt('Previsão mensal por omissão (€):', btn.dataset.previsto);
+        const novoPrevisto = parseFloat(novoPrevistoTexto);
+        const update = { nome: novoNome.trim() };
+        if (!isNaN(novoPrevisto) && novoPrevisto >= 0) update.valor_previsto = novoPrevisto;
+        const { error } = await flux.from('receitas_categorias').update(update).eq('id', btn.dataset.id);
+        if (error) { alert('Não foi possível guardar: ' + error.message); return; }
+        await carregarDados();
+        renderDesktopGridReceitas();
+        renderMobileReceitas();
+      });
+    });
+    document.querySelectorAll('.archive-receita-cat-btn').forEach(btn => {
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        if (!confirm(`Arquivar a categoria de receita "${btn.dataset.nome}"?`)) return;
+        const { error } = await flux.from('receitas_categorias').update({ ativa: false }).eq('id', btn.dataset.id);
+        if (error) { alert('Não foi possível arquivar: ' + error.message); return; }
+        await carregarDados();
+        renderDesktopGridReceitas();
+        renderMobileReceitas();
+      });
+    });
+    document.querySelectorAll('.edit-previsao-cell').forEach(td => {
+      td.addEventListener('click', async (ev) => {
+        if (ev.target.closest('.row-actions')) return; // não intercetar cliques nos botões de editar/arquivar
+        const novoValorTexto = prompt(`Previsão para ${labelDoMes(td.dataset.mes)} (€):`, td.dataset.atual);
+        if (novoValorTexto === null) return;
+        const novoValor = parseFloat(novoValorTexto);
+        if (isNaN(novoValor) || novoValor < 0) return;
+        const { error } = await flux.from('receitas_categoria_previsoes').upsert({
+          user_id: userIdGlobal,
+          categoria_id: td.dataset.id,
+          mes: `${td.dataset.mes}-01`,
+          valor_previsto: novoValor
+        }, { onConflict: 'categoria_id,mes' });
+        if (error) { alert('Não foi possível guardar: ' + error.message); return; }
+        await carregarDados();
+        renderDesktopGridReceitas();
+        renderMobileReceitas();
+      });
+    });
+  }
+
   (async () => {
     const userId = await fluxRequireSession();
     if (!userId) return;
     userIdGlobal = userId;
-    await carregarGrelha();
+    await carregarDados();
+    renderDesktopGrid();
+    renderMobile();
+    renderDesktopGridReceitas();
+    renderMobileReceitas();
   })();
 
   // Criar categoria nova
@@ -197,9 +471,9 @@
     addForm.style.display = 'none';
   });
   let corSelecionada = '#1F6F78';
-  document.querySelectorAll('.color-swatch').forEach(sw => {
+  document.querySelectorAll('#corSwatches .color-swatch').forEach(sw => {
     sw.addEventListener('click', () => {
-      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+      document.querySelectorAll('#corSwatches .color-swatch').forEach(s => s.classList.remove('selected'));
       sw.classList.add('selected');
       corSelecionada = sw.dataset.cor;
     });
@@ -215,7 +489,42 @@
     document.getElementById('novaCatNome').value = '';
     document.getElementById('novaCatLimite').value = '';
     addForm.style.display = 'none';
-    await carregarGrelha();
+    await carregarDados();
+    renderDesktopGrid();
+    renderMobile();
+  });
+
+  // Criar categoria de receita nova
+  const toggleAddReceitaBtn = document.getElementById('toggleAddReceitaBtn');
+  const addFormReceita = document.getElementById('addFormReceita');
+  toggleAddReceitaBtn.addEventListener('click', () => {
+    addFormReceita.style.display = addFormReceita.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('cancelarNovaReceitaCat').addEventListener('click', () => {
+    addFormReceita.style.display = 'none';
+  });
+  let corSelecionadaReceita = '#4C8C6B';
+  document.querySelectorAll('#corSwatchesReceita .color-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      document.querySelectorAll('#corSwatchesReceita .color-swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+      corSelecionadaReceita = sw.dataset.cor;
+    });
+  });
+  document.getElementById('guardarNovaReceitaCat').addEventListener('click', async () => {
+    const nome = document.getElementById('novaReceitaCatNome').value.trim();
+    const previsto = parseFloat(document.getElementById('novaReceitaCatPrevisto').value) || 0;
+    if (!nome) { alert('Escreve um nome para a categoria.'); return; }
+    const { error } = await flux.from('receitas_categorias').insert({
+      user_id: userIdGlobal, nome, cor: corSelecionadaReceita, valor_previsto: previsto, ativa: true
+    });
+    if (error) { alert('Não foi possível criar: ' + error.message); return; }
+    document.getElementById('novaReceitaCatNome').value = '';
+    document.getElementById('novaReceitaCatPrevisto').value = '';
+    addFormReceita.style.display = 'none';
+    await carregarDados();
+    renderDesktopGridReceitas();
+    renderMobileReceitas();
   });
 </script>
 
