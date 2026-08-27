@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flux — Início</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="eyebrow" id="dateLine"></div>
+  <div class="greeting" id="greeting">Olá</div>
+</header>
+
+<main>
+  <div class="balance-card">
+    <div class="balance-label">Disponível este mês</div>
+    <div class="balance-figure" id="balanceFigure">€0<span class="cents">,00</span></div>
+    <svg class="flow-underline" viewBox="0 0 260 14">
+      <defs>
+        <linearGradient id="flowGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#1F6F78"/>
+          <stop offset="100%" stop-color="#C97B4A"/>
+        </linearGradient>
+      </defs>
+      <path d="M2 8 Q 20 1, 38 8 T 74 8 T 110 8 T 146 8 T 182 8 T 218 8 T 254 8" fill="none" stroke="url(#flowGrad)" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-label"><span class="stat-dot" style="background:var(--moss)"></span>Receitas</div>
+        <div class="stat-value pos" id="statReceitas">+€0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label"><span class="stat-dot" style="background:var(--brick)"></span>Despesas</div>
+        <div class="stat-value neg" id="statDespesas">−€0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <div class="section-title">Orçamento por categoria</div>
+    <a class="section-link" href="orcamento.html">ver tudo →</a>
+  </div>
+  <div class="budget-card" id="budgetCard">
+    <div class="empty-note">A carregar…</div>
+  </div>
+
+  <div class="section-head">
+    <div class="section-title">Próximos pagamentos</div>
+    <a class="section-link" href="calendario.html">calendário →</a>
+  </div>
+  <div class="pay-list" id="payList">
+    <div class="empty-note">A carregar…</div>
+  </div>
+</main>
+
+<a class="scan-fab" href="digitalizar.html" role="button" aria-label="Digitalizar fatura">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"/>
+    <circle cx="12" cy="13" r="3.5"/>
+  </svg>
+</a>
+
+<nav class="tabbar">
+  <a class="tab active" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+    Início
+  </a>
+  <a class="tab" href="orcamento.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9M3 12h9V3"/></svg>
+    Orçamento
+  </a>
+  <div class="tab spacer"></div>
+  <a class="tab" href="calendario.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+    Calendário
+  </a>
+  <a class="tab" href="movimentos.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></svg>
+    Movimentos
+  </a>
+</nav>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script>
+  function euros(v){
+    const n = Number(v || 0);
+    return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function euroParts(v){
+    const [inteiro, cent] = euros(v).split(',');
+    return { inteiro, cent };
+  }
+
+  (async () => {
+    const userId = await fluxRequireSession();
+    if (!userId) return;
+
+    document.getElementById('dateLine').textContent =
+      new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    // Nome do perfil
+    const { data: perfil } = await flux
+      .from('perfis')
+      .select('nome')
+      .eq('id', userId)
+      .single();
+    document.getElementById('greeting').textContent = `Olá, ${perfil?.nome || ''}`.trim();
+
+    // Saldo total das contas ativas
+    const { data: contas } = await flux
+      .from('contas')
+      .select('saldo_atual')
+      .eq('user_id', userId)
+      .eq('ativa', true);
+    const saldoTotal = (contas || []).reduce((s, c) => s + Number(c.saldo_atual), 0);
+    const { inteiro, cent } = euroParts(saldoTotal);
+    document.getElementById('balanceFigure').innerHTML = `€${inteiro}<span class="cents">,${cent}</span>`;
+
+    // Receitas/despesas do mês corrente
+    const agora = new Date();
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString().slice(0, 10);
+    const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+    const [{ data: receitasMes }, { data: despesasMes }] = await Promise.all([
+      flux.from('receitas').select('valor').eq('user_id', userId).gte('data', inicioMes).lte('data', fimMes),
+      flux.from('despesas').select('valor').eq('user_id', userId).gte('data', inicioMes).lte('data', fimMes)
+    ]);
+    const totalReceitas = (receitasMes || []).reduce((s, r) => s + Number(r.valor), 0);
+    const totalDespesas = (despesasMes || []).reduce((s, d) => s + Number(d.valor), 0);
+    document.getElementById('statReceitas').textContent = `+€${euros(totalReceitas)}`;
+    document.getElementById('statDespesas').textContent = `−€${euros(totalDespesas)}`;
+
+    // Orçamento por categoria (categorias ativas + despesas do mês)
+    const { data: categorias } = await flux
+      .from('orcamento_categorias')
+      .select('id, nome, limite_mensal')
+      .eq('user_id', userId)
+      .eq('ativa', true)
+      .order('nome');
+
+    const budgetCard = document.getElementById('budgetCard');
+    if (!categorias || categorias.length === 0) {
+      budgetCard.innerHTML = '<div class="empty-note">Ainda sem categorias.</div>';
+    } else {
+      const gastosPorCategoria = {};
+      const { data: despesasComCategoria } = await flux
+        .from('despesas')
+        .select('valor, categoria_id')
+        .eq('user_id', userId)
+        .gte('data', inicioMes)
+        .lte('data', fimMes);
+      (despesasComCategoria || []).forEach(d => {
+        gastosPorCategoria[d.categoria_id] = (gastosPorCategoria[d.categoria_id] || 0) + Number(d.valor);
+      });
+
+      budgetCard.innerHTML = categorias.map(cat => {
+        const gasto = gastosPorCategoria[cat.id] || 0;
+        const limite = Number(cat.limite_mensal);
+        const pct = limite > 0 ? Math.min(100, Math.round((gasto / limite) * 100)) : 0;
+        const corClasse = gasto > limite ? 'brick' : (pct >= 80 ? 'copper' : '');
+        return `
+          <div class="budget-row">
+            <div class="budget-top">
+              <span class="budget-cat">${cat.nome}</span>
+              <span class="budget-amounts">€${euros(gasto)} / €${euros(limite)}</span>
+            </div>
+            <div class="budget-bar-track"><div class="budget-bar-fill ${corClasse}" style="width:${pct}%"></div></div>
+          </div>`;
+      }).join('');
+    }
+
+    // Próximos pagamentos (pendentes/atrasados, mais próximos primeiro)
+    const { data: pagamentos } = await flux
+      .from('pagamentos_agenda')
+      .select('titulo, valor, data_vencimento, estado')
+      .eq('user_id', userId)
+      .in('estado', ['pendente', 'atrasado'])
+      .order('data_vencimento', { ascending: true })
+      .limit(5);
+
+    const payList = document.getElementById('payList');
+    if (!pagamentos || pagamentos.length === 0) {
+      payList.innerHTML = '<div class="empty-note">Sem pagamentos pendentes.</div>';
+    } else {
+      const hoje = new Date(); hoje.setHours(0,0,0,0);
+      payList.innerHTML = pagamentos.map(p => {
+        const venc = new Date(p.data_vencimento + 'T00:00:00');
+        const dias = Math.round((venc - hoje) / 86400000);
+        let badgeClasse, badgeTexto;
+        if (p.estado === 'atrasado' || dias < 0) {
+          badgeClasse = 'overdue'; badgeTexto = 'ATRASADO';
+        } else if (dias <= 3) {
+          badgeClasse = 'soon'; badgeTexto = `<span class="num">${dias}</span>dias`;
+        } else {
+          badgeClasse = 'later'; badgeTexto = `<span class="num">${dias}</span>dias`;
+        }
+        const dataFmt = venc.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
+        return `
+          <div class="pay-card">
+            <div class="pay-badge ${badgeClasse}">${badgeTexto}</div>
+            <div class="pay-info">
+              <div class="pay-title">${p.titulo}</div>
+              <div class="pay-sub">${dataFmt}</div>
+            </div>
+            <div class="pay-amount">€${euros(p.valor)}</div>
+          </div>`;
+      }).join('');
+    }
+  })();
+</script>
+
+</body>
+</html>

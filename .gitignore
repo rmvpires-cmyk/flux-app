@@ -1,0 +1,3 @@
+# Chaves reais do Supabase — usa config.js localmente, nunca o commits com valores reais
+# se estiveres a usar git em vez do upload manual pela interface do GitHub.
+config.local.js

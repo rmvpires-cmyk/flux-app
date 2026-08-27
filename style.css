@@ -1,0 +1,264 @@
+/* ============================================================
+   FLUX — folha de estilo partilhada
+   Paleta e tipografia da identidade visual (ver flux-identidade-visual.html)
+   ============================================================ */
+
+:root{
+  --paper: #EAF0EE;
+  --paper-2: #DFE7E3;
+  --card: #FFFFFF;
+  --ink: #17262B;
+  --ink-soft: #4E6167;
+  --ink-faint: #8A9A9C;
+  --current: #1F6F78;
+  --current-soft: #DCEBE9;
+  --copper: #C97B4A;
+  --copper-soft: #F3E3D6;
+  --moss: #4C8C6B;
+  --moss-soft: #E1EEE6;
+  --brick: #B5453D;
+  --brick-soft: #F4DEDA;
+  --line: rgba(23,38,43,0.08);
+  --font-display: 'Fraunces', serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+
+body{
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  max-width: 430px;
+  margin-inline: auto;
+  min-height: 100vh;
+  padding-bottom: 96px;
+}
+
+a{ color: inherit; }
+
+header{ padding: 24px 20px 8px; }
+.eyebrow{
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--current);
+}
+.greeting{
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+main{ padding: 8px 18px 0; }
+
+/* SALDO — cartão assinatura */
+.balance-card{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 22px 20px;
+  margin-top: 14px;
+}
+.balance-label{ font-size: 12.5px; color: var(--ink-soft); }
+.balance-figure{
+  font-family: var(--font-mono);
+  font-size: 34px;
+  font-weight: 600;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.balance-figure .cents{ font-size: 19px; color: var(--ink-soft); }
+.flow-underline{ width: 100%; max-width: 220px; height: 14px; margin-top: 10px; display:block; }
+.flow-underline path{ stroke-dasharray: 400; animation: flow 5s linear infinite; }
+@keyframes flow{ 0%{ stroke-dashoffset:0; } 100%{ stroke-dashoffset:-400; } }
+@media (prefers-reduced-motion: reduce){ .flow-underline path{ animation:none; } }
+
+.stat-row{
+  display:flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.stat{ flex:1; }
+.stat-label{ font-size: 11.5px; color: var(--ink-soft); display:flex; align-items:center; gap:5px; }
+.stat-dot{ width:6px; height:6px; border-radius:50%; }
+.stat-value{ font-family: var(--font-mono); font-size: 16px; font-weight: 600; margin-top: 3px; }
+.stat-value.pos{ color: var(--moss); }
+.stat-value.neg{ color: var(--brick); }
+
+/* CABEÇALHO DE SECÇÃO */
+.section-head{
+  display:flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 26px 0 12px;
+}
+.section-title{
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+}
+.section-link{
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--current);
+  text-decoration: none;
+}
+
+/* ORÇAMENTO */
+.budget-card{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+.budget-row{ padding: 10px 0; }
+.budget-row + .budget-row{ border-top: 1px solid var(--line); }
+.budget-top{ display:flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 8px; }
+.budget-cat{ font-weight: 500; }
+.budget-amounts{ font-family: var(--font-mono); color: var(--ink-soft); font-size: 12.5px; }
+.budget-bar-track{ height: 6px; background: var(--paper-2); border-radius: 999px; overflow: hidden; }
+.budget-bar-fill{ height: 100%; border-radius: 999px; background: var(--current); }
+.budget-bar-fill.copper{ background: var(--copper); }
+.budget-bar-fill.brick{ background: var(--brick); }
+
+/* PRÓXIMOS PAGAMENTOS */
+.pay-list{ display:flex; flex-direction:column; gap: 10px; }
+.pay-card{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display:flex;
+  align-items:center;
+  gap: 14px;
+}
+.pay-badge{
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  background: var(--ink-faint);
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align:center;
+  min-width: 46px;
+  line-height: 1.2;
+}
+.pay-badge .num{ font-size: 15px; display:block; }
+.pay-badge.soon{ background: var(--copper); }
+.pay-badge.overdue{ background: var(--brick); }
+.pay-badge.later{ background: var(--current); }
+.pay-info{ flex:1; }
+.pay-title{ font-size: 14px; font-weight: 500; }
+.pay-sub{ font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
+.pay-amount{ font-family: var(--font-mono); font-size: 14px; font-weight: 600; }
+.empty-note{ font-size: 12.5px; color: var(--ink-soft); padding: 8px 2px; }
+
+/* FAB + NAV */
+.scan-fab{
+  position: fixed;
+  bottom: 58px; left: 50%;
+  transform: translateX(-50%);
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  background: var(--current);
+  border: 4px solid var(--paper);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow: 0 6px 16px rgba(31,111,120,0.35);
+  z-index: 11;
+  cursor: pointer;
+}
+.scan-fab svg{ width: 24px; height: 24px; stroke: white; }
+
+nav.tabbar{
+  position: fixed;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+  display:flex;
+  justify-content: space-around;
+  align-items:center;
+  padding: 10px 8px calc(8px + env(safe-area-inset-bottom));
+  z-index: 10;
+}
+.tab{
+  display:flex;
+  flex-direction: column;
+  align-items:center;
+  gap: 4px;
+  background:none;
+  border:none;
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-size: 10px;
+  cursor:pointer;
+  padding: 4px 6px;
+  width: 64px;
+  text-decoration: none;
+}
+.tab.active{ color: var(--current); font-weight: 600; }
+.tab svg{ width:19px; height:19px; }
+.tab.spacer{ width: 58px; }
+.tab:focus-visible{ outline: 2px solid var(--current); outline-offset: 2px; border-radius: 6px; }
+
+/* FORMULÁRIOS (login/registo) */
+.auth-wrap{ padding: 60px 26px 26px; }
+.field{ margin-top: 16px; }
+.field label{ font-size: 12.5px; color: var(--ink-soft); display:block; margin-bottom: 6px; }
+.field input{
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  color: var(--ink);
+}
+.field input:focus{ outline: 2px solid var(--current); outline-offset: 1px; }
+.btn-primary{
+  width: 100%;
+  margin-top: 22px;
+  padding: 13px;
+  border-radius: 999px;
+  border: none;
+  background: var(--current);
+  color: white;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14.5px;
+  cursor: pointer;
+}
+.btn-primary:disabled{ opacity: 0.6; cursor: default; }
+.btn-link{
+  display:block;
+  text-align:center;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--current);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.auth-msg{
+  margin-top: 14px;
+  font-size: 12.5px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+.auth-msg.error{ background: var(--brick-soft); color: var(--brick); }
+.auth-msg.ok{ background: var(--moss-soft); color: var(--moss); }

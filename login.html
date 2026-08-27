@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flux — Entrar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  body{ padding-bottom: 26px; }
+  .wordmark{
+    font-family: var(--font-display);
+    font-size: 40px;
+    font-weight: 600;
+    font-style: italic;
+    text-align: center;
+  }
+  .flow-line{ display:block; margin: 6px auto 0; width: 140px; height: 18px; }
+  .flow-line path{ stroke-dasharray: 300; animation: flow 4.5s linear infinite; }
+  .mode-tabs{ display:flex; gap: 8px; margin-top: 30px; }
+  .mode-tab{
+    flex:1;
+    text-align:center;
+    padding: 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    background: var(--paper-2);
+    cursor: pointer;
+    border: none;
+    font-family: var(--font-body);
+  }
+  .mode-tab.active{ background: var(--current); color: white; }
+  #nomeField{ display:none; }
+</style>
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="wordmark">flux</div>
+  <svg class="flow-line" viewBox="0 0 180 22">
+    <defs>
+      <linearGradient id="flowGrad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#1F6F78"/>
+        <stop offset="100%" stop-color="#C97B4A"/>
+      </linearGradient>
+    </defs>
+    <path d="M2 14 Q 22 2, 42 14 T 82 14 T 122 14 T 162 14" fill="none" stroke="url(#flowGrad)" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabLogin" type="button">Entrar</button>
+    <button class="mode-tab" id="tabRegisto" type="button">Criar conta</button>
+  </div>
+
+  <form id="authForm">
+    <div class="field" id="nomeField">
+      <label for="nome">Nome</label>
+      <input type="text" id="nome" autocomplete="name">
+    </div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" autocomplete="email" required>
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="current-password" required minlength="6">
+    </div>
+    <button type="submit" class="btn-primary" id="submitBtn">Entrar</button>
+  </form>
+
+  <button class="btn-link" id="forgotBtn" type="button">Esqueci-me da password</button>
+
+  <div id="msg"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script>
+  let modo = 'login';
+  const tabLogin = document.getElementById('tabLogin');
+  const tabRegisto = document.getElementById('tabRegisto');
+  const nomeField = document.getElementById('nomeField');
+  const submitBtn = document.getElementById('submitBtn');
+  const msg = document.getElementById('msg');
+
+  function setModo(novo){
+    modo = novo;
+    tabLogin.classList.toggle('active', modo === 'login');
+    tabRegisto.classList.toggle('active', modo === 'registo');
+    nomeField.style.display = modo === 'registo' ? 'block' : 'none';
+    document.getElementById('nome').required = modo === 'registo';
+    submitBtn.textContent = modo === 'registo' ? 'Criar conta' : 'Entrar';
+    msg.innerHTML = '';
+  }
+  tabLogin.addEventListener('click', () => setModo('login'));
+  tabRegisto.addEventListener('click', () => setModo('registo'));
+
+  function showMsg(texto, tipo){
+    msg.innerHTML = `<div class="auth-msg ${tipo}">${texto}</div>`;
+  }
+
+  document.getElementById('authForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    msg.innerHTML = '';
+
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+      if (modo === 'registo') {
+        const nome = document.getElementById('nome').value.trim();
+        const { error } = await flux.auth.signUp({
+          email, password,
+          options: { data: { nome } }
+        });
+        if (error) throw error;
+        showMsg('Conta criada. Verifica o teu email para confirmar antes de entrares.', 'ok');
+      } else {
+        const { error } = await flux.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        window.location.href = 'index.html';
+      }
+    } catch (err) {
+      showMsg(err.message || 'Ocorreu um erro. Tenta novamente.', 'error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('forgotBtn').addEventListener('click', async () => {
+    const email = document.getElementById('email').value.trim();
+    if (!email) { showMsg('Escreve o teu email primeiro.', 'error'); return; }
+    const { error } = await flux.auth.resetPasswordForEmail(email);
+    if (error) { showMsg(error.message, 'error'); return; }
+    showMsg('Enviámos um email para repores a password.', 'ok');
+  });
+
+  // Se já houver sessão ativa, salta logo para a app
+  flux.auth.getSession().then(({ data: { session } }) => {
+    if (session) window.location.href = 'index.html';
+  });
+</script>
+
+</body>
+</html>
