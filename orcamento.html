@@ -13,20 +13,49 @@
 <header>
   <div class="eyebrow">FLUX</div>
   <div class="greeting">Orçamento</div>
-  <div class="month-nav">
-    <button id="mesAnterior" aria-label="Mês anterior">
+  <div class="year-nav">
+    <button id="anoAnterior" aria-label="Ano anterior">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
     </button>
-    <span class="month-label" id="mesLabel"></span>
-    <button id="mesSeguinte" aria-label="Mês seguinte">
+    <span class="year-label" id="anoLabel"></span>
+    <button id="anoSeguinte" aria-label="Ano seguinte">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
     </button>
   </div>
 </header>
 
 <main>
-  <div class="budget-card" id="budgetCard" style="margin-top:16px">
-    <div class="empty-note">A carregar…</div>
+  <div class="grid-wrap">
+    <table class="budget-grid" id="grid">
+      <thead><tr><th class="cat-name-head">Categoria</th></tr></thead>
+      <tbody><tr><td class="empty-note">A carregar…</td></tr></tbody>
+    </table>
+  </div>
+
+  <button class="toggle-add-btn" id="toggleAddBtn">+ Nova categoria</button>
+  <div class="add-form" id="addForm" style="display:none">
+    <div class="field">
+      <label for="novaCatNome">Nome</label>
+      <input type="text" id="novaCatNome" placeholder="ex. Educação">
+    </div>
+    <div class="field">
+      <label for="novaCatLimite">Limite mensal por omissão (€)</label>
+      <input type="number" step="0.01" min="0" id="novaCatLimite" placeholder="0.00">
+    </div>
+    <div class="field">
+      <label>Cor</label>
+      <div class="color-swatches" id="corSwatches">
+        <div class="color-swatch selected" style="background:#1F6F78" data-cor="#1F6F78"></div>
+        <div class="color-swatch" style="background:#C97B4A" data-cor="#C97B4A"></div>
+        <div class="color-swatch" style="background:#4C8C6B" data-cor="#4C8C6B"></div>
+        <div class="color-swatch" style="background:#B5453D" data-cor="#B5453D"></div>
+        <div class="color-swatch" style="background:#4E6167" data-cor="#4E6167"></div>
+      </div>
+    </div>
+    <div class="add-form-actions">
+      <button class="btn-secondary" id="cancelarNovaCat">Cancelar</button>
+      <button class="btn-small-primary" id="guardarNovaCat">Criar categoria</button>
+    </div>
   </div>
 </main>
 
@@ -58,86 +87,136 @@
     const n = Number(v || 0);
     return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+  const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-  // Mês corrente vem do parâmetro ?mes=YYYY-MM, senão usa o mês de hoje
   const params = new URLSearchParams(window.location.search);
-  let mesAtual = params.get('mes'); // formato 'YYYY-MM'
-  if (!mesAtual || !/^\d{4}-\d{2}$/.test(mesAtual)) {
-    const hoje = new Date();
-    mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  let anoAtual = parseInt(params.get('ano'), 10);
+  if (!anoAtual || isNaN(anoAtual)) anoAtual = new Date().getFullYear();
+  document.getElementById('anoLabel').textContent = anoAtual;
+
+  document.getElementById('anoAnterior').addEventListener('click', () => {
+    window.location.href = `orcamento.html?ano=${anoAtual - 1}`;
+  });
+  document.getElementById('anoSeguinte').addEventListener('click', () => {
+    window.location.href = `orcamento.html?ano=${anoAtual + 1}`;
+  });
+
+  let userIdGlobal = null;
+
+  // Dado um conjunto de exceções (ordenadas por mês) e o limite por omissão,
+  // devolve o limite efetivo para cada um dos 12 meses do ano.
+  function calcularLimitesDoAno(limitePorOmissao, excecoesOrdenadas) {
+    const resultado = [];
+    for (let m = 0; m < 12; m++) {
+      const dataAlvo = `${anoAtual}-${String(m + 1).padStart(2, '0')}-01`;
+      let valor = limitePorOmissao;
+      for (const exc of excecoesOrdenadas) {
+        if (exc.mes <= dataAlvo) valor = Number(exc.limite_mensal);
+        else break;
+      }
+      resultado.push(valor);
+    }
+    return resultado;
   }
 
-  function limitesDoMes(mesStr) {
-    const [ano, mes] = mesStr.split('-').map(Number);
-    const inicio = new Date(ano, mes - 1, 1).toISOString().slice(0, 10);
-    const fim = new Date(ano, mes, 0).toISOString().slice(0, 10);
-    return { inicio, fim };
-  }
+  async function carregarGrelha() {
+    const userId = userIdGlobal;
+    const inicioAno = `${anoAtual}-01-01`;
+    const fimAno = `${anoAtual}-12-31`;
 
-  function labelDoMes(mesStr) {
-    const [ano, mes] = mesStr.split('-').map(Number);
-    const d = new Date(ano, mes - 1, 1);
-    return d.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
-  }
+    const [{ data: categorias }, { data: excecoes }, { data: despesas }] = await Promise.all([
+      flux.from('orcamento_categorias').select('id, nome, limite_mensal, cor').eq('user_id', userId).eq('ativa', true).order('nome'),
+      flux.from('orcamento_categoria_limites').select('categoria_id, mes, limite_mensal').eq('user_id', userId).order('mes'),
+      flux.from('despesas').select('valor, categoria_id, data').eq('user_id', userId).gte('data', inicioAno).lte('data', fimAno)
+    ]);
 
-  function irParaMes(delta) {
-    const [ano, mes] = mesAtual.split('-').map(Number);
-    const d = new Date(ano, mes - 1 + delta, 1);
-    const novoMes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    window.location.href = `orcamento.html?mes=${novoMes}`;
-  }
+    const grid = document.getElementById('grid');
+    if (!categorias || categorias.length === 0) {
+      grid.querySelector('tbody').innerHTML = '<tr><td class="empty-note">Ainda sem categorias.</td></tr>';
+      return;
+    }
 
-  document.getElementById('mesAnterior').addEventListener('click', () => irParaMes(-1));
-  document.getElementById('mesSeguinte').addEventListener('click', () => irParaMes(1));
-  document.getElementById('mesLabel').textContent = labelDoMes(mesAtual);
+    // gasto por categoria/mês
+    const gastoPorCategoriaMes = {};
+    (despesas || []).forEach(d => {
+      const mes = d.data.slice(5, 7);
+      const chave = `${d.categoria_id}_${mes}`;
+      gastoPorCategoriaMes[chave] = (gastoPorCategoriaMes[chave] || 0) + Number(d.valor);
+    });
+
+    const excecoesPorCategoria = {};
+    (excecoes || []).forEach(e => {
+      if (!excecoesPorCategoria[e.categoria_id]) excecoesPorCategoria[e.categoria_id] = [];
+      excecoesPorCategoria[e.categoria_id].push(e);
+    });
+
+    let theadRow = '<th class="cat-name-head">Categoria</th>' + MESES_ABREV.map(m => `<th>${m}</th>`).join('');
+    grid.querySelector('thead tr').innerHTML = theadRow;
+
+    let tbodyHtml = '';
+    categorias.forEach(cat => {
+      const limites = calcularLimitesDoAno(Number(cat.limite_mensal), excecoesPorCategoria[cat.id] || []);
+      let linha = `<tr><td class="cat-name" data-id="${cat.id}" data-mes="${anoAtual}-${String(new Date().getMonth()+1).padStart(2,'0')}">${cat.nome}</td>`;
+      for (let m = 0; m < 12; m++) {
+        const mesStr = String(m + 1).padStart(2, '0');
+        const gasto = gastoPorCategoriaMes[`${cat.id}_${mesStr}`] || 0;
+        const limite = limites[m];
+        const pct = limite > 0 ? (gasto / limite) : (gasto > 0 ? 2 : 0);
+        const classe = pct > 1 ? 'over' : (pct >= 0.8 ? 'warn' : '');
+        linha += `<td class="cell ${classe}" data-id="${cat.id}" data-mes="${anoAtual}-${mesStr}">
+          <span class="g">${gasto > 0 ? euros(gasto) : '–'}</span>
+          <span class="l">/${limite > 0 ? euros(limite) : '0'}</span>
+        </td>`;
+      }
+      linha += '</tr>';
+      tbodyHtml += linha;
+    });
+    grid.querySelector('tbody').innerHTML = tbodyHtml;
+
+    grid.querySelectorAll('td.cat-name, td.cell').forEach(td => {
+      td.addEventListener('click', () => {
+        window.location.href = `orcamento-categoria.html?id=${td.dataset.id}&mes=${td.dataset.mes}`;
+      });
+    });
+  }
 
   (async () => {
     const userId = await fluxRequireSession();
     if (!userId) return;
-
-    const { inicio, fim } = limitesDoMes(mesAtual);
-
-    const [{ data: categorias }, { data: despesas }] = await Promise.all([
-      flux.from('orcamento_categorias')
-        .select('id, nome, limite_mensal')
-        .eq('user_id', userId)
-        .eq('ativa', true)
-        .order('nome'),
-      flux.from('despesas')
-        .select('valor, categoria_id')
-        .eq('user_id', userId)
-        .gte('data', inicio)
-        .lte('data', fim)
-    ]);
-
-    const budgetCard = document.getElementById('budgetCard');
-    if (!categorias || categorias.length === 0) {
-      budgetCard.innerHTML = '<div class="empty-note">Ainda sem categorias.</div>';
-      return;
-    }
-
-    const gastosPorCategoria = {};
-    (despesas || []).forEach(d => {
-      gastosPorCategoria[d.categoria_id] = (gastosPorCategoria[d.categoria_id] || 0) + Number(d.valor);
-    });
-
-    budgetCard.innerHTML = categorias.map(cat => {
-      const gasto = gastosPorCategoria[cat.id] || 0;
-      const limite = Number(cat.limite_mensal);
-      const pct = limite > 0 ? Math.min(100, Math.round((gasto / limite) * 100)) : (gasto > 0 ? 100 : 0);
-      const corClasse = gasto > limite ? 'brick' : (pct >= 80 ? 'copper' : '');
-      return `
-        <a class="budget-row-link" href="orcamento-categoria.html?id=${cat.id}&mes=${mesAtual}">
-          <div class="budget-row">
-            <div class="budget-top">
-              <span class="budget-cat">${cat.nome}</span>
-              <span class="budget-amounts">€${euros(gasto)} / €${euros(limite)}</span>
-            </div>
-            <div class="budget-bar-track"><div class="budget-bar-fill ${corClasse}" style="width:${pct}%"></div></div>
-          </div>
-        </a>`;
-    }).join('');
+    userIdGlobal = userId;
+    await carregarGrelha();
   })();
+
+  // Criar categoria nova
+  const toggleAddBtn = document.getElementById('toggleAddBtn');
+  const addForm = document.getElementById('addForm');
+  toggleAddBtn.addEventListener('click', () => {
+    addForm.style.display = addForm.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('cancelarNovaCat').addEventListener('click', () => {
+    addForm.style.display = 'none';
+  });
+  let corSelecionada = '#1F6F78';
+  document.querySelectorAll('.color-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+      corSelecionada = sw.dataset.cor;
+    });
+  });
+  document.getElementById('guardarNovaCat').addEventListener('click', async () => {
+    const nome = document.getElementById('novaCatNome').value.trim();
+    const limite = parseFloat(document.getElementById('novaCatLimite').value) || 0;
+    if (!nome) { alert('Escreve um nome para a categoria.'); return; }
+    const { error } = await flux.from('orcamento_categorias').insert({
+      user_id: userIdGlobal, nome, limite_mensal: limite, cor: corSelecionada, ativa: true
+    });
+    if (error) { alert('Não foi possível criar: ' + error.message); return; }
+    document.getElementById('novaCatNome').value = '';
+    document.getElementById('novaCatLimite').value = '';
+    addForm.style.display = 'none';
+    await carregarGrelha();
+  });
 </script>
 
 </body>

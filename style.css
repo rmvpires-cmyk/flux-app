@@ -320,6 +320,179 @@ nav.tabbar{
 .subcat-name{ font-size: 14px; font-weight: 500; }
 .subcat-amount{ font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--ink-soft); }
 
+/* GRELHA ANUAL DE ORÇAMENTO */
+.year-nav{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap: 18px;
+  margin-top: 12px;
+}
+.year-nav button{
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink-soft);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor: pointer;
+}
+.year-nav button svg{ width: 16px; height: 16px; }
+.year-label{
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: center;
+}
+
+.grid-wrap{
+  overflow-x: auto;
+  margin-top: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  -webkit-overflow-scrolling: touch;
+}
+table.budget-grid{
+  border-collapse: collapse;
+  font-size: 11px;
+  width: 100%;
+}
+table.budget-grid th, table.budget-grid td{
+  padding: 8px 6px;
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+table.budget-grid th{
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  font-size: 10px;
+  background: var(--paper-2);
+}
+table.budget-grid td.cat-name{
+  position: sticky;
+  left: 0;
+  background: var(--card);
+  text-align: left;
+  font-weight: 500;
+  font-size: 12.5px;
+  padding-left: 14px;
+  border-right: 1px solid var(--line);
+  cursor: pointer;
+}
+table.budget-grid th.cat-name-head{
+  position: sticky;
+  left: 0;
+  background: var(--paper-2);
+  border-right: 1px solid var(--line);
+  text-align: left;
+  padding-left: 14px;
+}
+table.budget-grid td.cell{ cursor: pointer; font-family: var(--font-mono); }
+table.budget-grid td.cell:hover{ background: var(--paper-2); }
+table.budget-grid td.cell .g{ display:block; font-weight: 600; }
+table.budget-grid td.cell .l{ display:block; color: var(--ink-faint); font-size: 9.5px; margin-top:1px; }
+table.budget-grid td.cell.over .g{ color: var(--brick); }
+table.budget-grid td.cell.warn .g{ color: var(--copper); }
+
+.add-form{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  margin-top: 14px;
+}
+.add-form .field{ margin-top: 12px; }
+.add-form .field:first-child{ margin-top: 0; }
+.add-form .field label{ font-size: 12px; color: var(--ink-soft); display:block; margin-bottom: 5px; }
+.add-form input{
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+}
+.color-swatches{ display:flex; gap: 8px; margin-top: 4px; }
+.color-swatch{
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.color-swatch.selected{ border-color: var(--ink); }
+.add-form-actions{ display:flex; gap: 8px; margin-top: 14px; }
+.btn-secondary{
+  flex:1;
+  padding: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn-small-primary{
+  flex:1;
+  padding: 11px;
+  border-radius: 999px;
+  border: none;
+  background: var(--current);
+  color: white;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.toggle-add-btn{
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px dashed var(--ink-faint);
+  background: none;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* AÇÕES DE LINHA (editar / arquivar) */
+.row-actions{ display:flex; gap: 6px; }
+.icon-btn{
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink-soft);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor: pointer;
+}
+.icon-btn svg{ width: 14px; height: 14px; }
+.icon-btn.danger{ color: var(--brick); }
+
+.inline-edit-row{ display:none; align-items:center; gap: 8px; margin-top: 10px; }
+.inline-edit-row.open{ display:flex; }
+.inline-edit-row input{
+  flex:1;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+
 /* FORMULÁRIOS (login/registo) */
 .auth-wrap{ padding: 60px 26px 26px; }
 .field{ margin-top: 16px; }
