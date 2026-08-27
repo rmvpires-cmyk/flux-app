@@ -332,8 +332,9 @@ nav.tabbar{
   header{ padding: 24px 32px 8px; }
   .grid-wrap{ overflow-x: visible; }
   table.budget-grid{ width: 100%; table-layout: fixed; }
-  table.budget-grid td.cat-name{ position: static; }
+  table.budget-grid td.cat-name{ position: static; white-space: normal; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
   table.budget-grid th.cat-name-head{ position: static; }
+  table.budget-grid td.cat-name, table.budget-grid th.cat-name-head{ width: 190px; }
 }
 
 /* GRELHA ANUAL DE ORÇAMENTO */
