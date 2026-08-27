@@ -72,6 +72,7 @@ main{ padding: 8px 18px 0; }
   font-variant-numeric: tabular-nums;
 }
 .balance-figure .cents{ font-size: 19px; color: var(--ink-soft); }
+.balance-extra{ font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; font-family: var(--font-mono); }
 .flow-underline{ width: 100%; max-width: 220px; height: 14px; margin-top: 10px; display:block; }
 .flow-underline path{ stroke-dasharray: 400; animation: flow 5s linear infinite; }
 @keyframes flow{ 0%{ stroke-dashoffset:0; } 100%{ stroke-dashoffset:-400; } }

@@ -17,8 +17,9 @@
 
 <main>
   <div class="balance-card">
-    <div class="balance-label">Disponível este mês</div>
+    <div class="balance-label">Disponível</div>
     <div class="balance-figure" id="balanceFigure">€0<span class="cents">,00</span></div>
+    <div class="balance-extra" id="balanceExtra" style="display:none;"></div>
     <svg class="flow-underline" viewBox="0 0 260 14">
       <defs>
         <linearGradient id="flowGrad" x1="0" y1="0" x2="1" y2="0">
@@ -121,16 +122,28 @@
       .single();
     document.getElementById('greeting').textContent = `Olá, ${perfil?.nome || ''}`.trim();
 
-    // Saldo total das contas ativas
+    // Saldo das contas ativas — "Disponível" só conta à ordem/dinheiro (o que dá para gastar já);
+    // poupança e investimento aparecem à parte, para não passar a ideia de que esse dinheiro está livre.
     const { data: contas } = await flux
       .from('contas')
       .select('id, nome, tipo, saldo_atual, cor')
       .eq('user_id', userId)
       .eq('ativa', true)
       .order('created_at');
-    const saldoTotal = (contas || []).reduce((s, c) => s + Number(c.saldo_atual), 0);
-    const { inteiro, cent } = euroParts(saldoTotal);
+    const TIPOS_DISPONIVEL = ['corrente', 'dinheiro'];
+    const saldoDisponivel = (contas || [])
+      .filter(c => TIPOS_DISPONIVEL.includes(c.tipo))
+      .reduce((s, c) => s + Number(c.saldo_atual), 0);
+    const saldoGuardado = (contas || [])
+      .filter(c => c.tipo === 'poupanca' || c.tipo === 'investimento')
+      .reduce((s, c) => s + Number(c.saldo_atual), 0);
+    const { inteiro, cent } = euroParts(saldoDisponivel);
     document.getElementById('balanceFigure').innerHTML = `€${inteiro}<span class="cents">,${cent}</span>`;
+    if (saldoGuardado !== 0) {
+      const balanceExtra = document.getElementById('balanceExtra');
+      balanceExtra.textContent = `+ €${euros(saldoGuardado)} em poupança e investimentos`;
+      balanceExtra.style.display = '';
+    }
 
     const nomesTipo = { corrente: 'Conta à ordem', poupanca: 'Poupança', investimento: 'Investimento', dinheiro: 'Dinheiro', cartao_credito: 'Cartão de crédito' };
     const iniciaisTipo = { corrente: 'CO', poupanca: 'PO', investimento: 'IN', dinheiro: 'DI', cartao_credito: 'CC' };
@@ -190,20 +203,32 @@
         gastosPorCategoria[d.categoria_id] = (gastosPorCategoria[d.categoria_id] || 0) + Number(d.valor);
       });
 
-      budgetCard.innerHTML = categorias.map(cat => {
+      // Esconde categorias sem limite definido e sem despesas este mês — não dizem nada.
+      // Uma categoria sem limite mas COM despesa continua a aparecer (precisas de a ver).
+      const categoriasComInfo = categorias.filter(cat => {
         const gasto = gastosPorCategoria[cat.id] || 0;
         const limite = Number(cat.limite_mensal);
-        const pct = limite > 0 ? Math.min(100, Math.round((gasto / limite) * 100)) : 0;
-        const corClasse = gasto > limite ? 'brick' : (pct >= 80 ? 'copper' : '');
-        return `
-          <div class="budget-row">
-            <div class="budget-top">
-              <span class="budget-cat">${cat.nome}</span>
-              <span class="budget-amounts">€${euros(gasto)} / €${euros(limite)}</span>
-            </div>
-            <div class="budget-bar-track"><div class="budget-bar-fill ${corClasse}" style="width:${pct}%"></div></div>
-          </div>`;
-      }).join('');
+        return limite > 0 || gasto > 0;
+      });
+
+      if (categoriasComInfo.length === 0) {
+        budgetCard.innerHTML = '<div class="empty-note">Sem categorias com limite ou despesas este mês.</div>';
+      } else {
+        budgetCard.innerHTML = categoriasComInfo.map(cat => {
+          const gasto = gastosPorCategoria[cat.id] || 0;
+          const limite = Number(cat.limite_mensal);
+          const pct = limite > 0 ? Math.min(100, Math.round((gasto / limite) * 100)) : 0;
+          const corClasse = gasto > limite ? 'brick' : (pct >= 80 ? 'copper' : '');
+          return `
+            <div class="budget-row">
+              <div class="budget-top">
+                <span class="budget-cat">${cat.nome}</span>
+                <span class="budget-amounts">€${euros(gasto)} / €${euros(limite)}</span>
+              </div>
+              <div class="budget-bar-track"><div class="budget-bar-fill ${corClasse}" style="width:${pct}%"></div></div>
+            </div>`;
+        }).join('');
+      }
     }
 
     // Próximos pagamentos (pendentes/atrasados, mais próximos primeiro)
