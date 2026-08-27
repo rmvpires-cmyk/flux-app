@@ -37,8 +37,8 @@
 
     <label class="upload-drop" id="uploadDrop">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16"/></svg>
-      <div id="uploadDropTexto">Toca para escolher o ficheiro do extrato<br>(CSV ou PDF)</div>
-      <input type="file" id="uFicheiro" accept=".csv,application/pdf">
+      <div id="uploadDropTexto">Toca para escolher o ficheiro do extrato<br>(CSV, XLS/XLSX ou PDF)</div>
+      <input type="file" id="uFicheiro" accept=".csv,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
     </label>
 
     <p class="empty-note" id="uploadErro" style="color:var(--brick);"></p>
@@ -103,6 +103,7 @@
   </div>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="supabase-client.js"></script>
@@ -179,6 +180,26 @@
       }
       prepararPassoMapeamento();
       irParaPasso(2);
+    } else if (nomeMin.endsWith('.xls') || nomeMin.endsWith('.xlsx') ||
+               file.type === 'application/vnd.ms-excel' ||
+               file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      formatoFicheiro = 'csv'; // a BD só distingue csv/pdf — folha de cálculo segue o mesmo caminho do csv
+      try {
+        const buffer = await file.arrayBuffer();
+        const livro = XLSX.read(buffer, { type: 'array' });
+        const folha = livro.Sheets[livro.SheetNames[0]];
+        csvLinhas = XLSX.utils.sheet_to_json(folha, { header: 1, raw: false, defval: '' })
+          .map(linha => linha.map(c => (c == null ? '' : String(c))))
+          .filter(l => l.some(c => c.trim() !== ''));
+        if (csvLinhas.length === 0) {
+          document.getElementById('uploadErro').textContent = 'Não foi possível ler linhas nesta folha de cálculo.';
+          return;
+        }
+        prepararPassoMapeamento();
+        irParaPasso(2);
+      } catch (e) {
+        document.getElementById('uploadErro').textContent = 'Erro a ler o ficheiro: ' + e.message;
+      }
     } else if (nomeMin.endsWith('.pdf') || file.type === 'application/pdf') {
       formatoFicheiro = 'pdf';
       document.getElementById('uploadDropTexto').textContent = 'A ler o PDF com IA — pode demorar alguns segundos…';
@@ -199,11 +220,11 @@
         await prepararPassoRevisao();
         irParaPasso(3);
       } catch (e) {
-        document.getElementById('uploadDropTexto').textContent = 'Toca para escolher o ficheiro do extrato (CSV ou PDF)';
+        document.getElementById('uploadDropTexto').textContent = 'Toca para escolher o ficheiro do extrato (CSV, XLS/XLSX ou PDF)';
         document.getElementById('uploadErro').textContent = 'Erro a ler o PDF: ' + e.message;
       }
     } else {
-      document.getElementById('uploadErro').textContent = 'Formato não suportado — usa CSV ou PDF.';
+      document.getElementById('uploadErro').textContent = 'Formato não suportado — usa CSV, XLS/XLSX ou PDF.';
     }
   });
 
