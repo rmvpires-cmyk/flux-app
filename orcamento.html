@@ -9,13 +9,27 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
 <header>
   <div class="eyebrow">FLUX</div>
   <div class="greeting">Orçamento</div>
+  <div class="month-nav">
+    <button id="mesAnterior" aria-label="Mês anterior">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <span class="month-label" id="mesLabel"></span>
+    <button id="mesSeguinte" aria-label="Mês seguinte">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+  </div>
 </header>
+
 <main>
-  <p class="empty-note">Este ecrã ainda vai ser desenhado — por agora usa "Início" para ver o resumo.</p>
+  <div class="budget-card" id="budgetCard" style="margin-top:16px">
+    <div class="empty-note">A carregar…</div>
+  </div>
 </main>
+
 <nav class="tabbar">
   <a class="tab" href="index.html">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
@@ -35,9 +49,96 @@
     Movimentos
   </a>
 </nav>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="supabase-client.js"></script>
-<script>fluxRequireSession();</script>
+<script>
+  function euros(v){
+    const n = Number(v || 0);
+    return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  // Mês corrente vem do parâmetro ?mes=YYYY-MM, senão usa o mês de hoje
+  const params = new URLSearchParams(window.location.search);
+  let mesAtual = params.get('mes'); // formato 'YYYY-MM'
+  if (!mesAtual || !/^\d{4}-\d{2}$/.test(mesAtual)) {
+    const hoje = new Date();
+    mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function limitesDoMes(mesStr) {
+    const [ano, mes] = mesStr.split('-').map(Number);
+    const inicio = new Date(ano, mes - 1, 1).toISOString().slice(0, 10);
+    const fim = new Date(ano, mes, 0).toISOString().slice(0, 10);
+    return { inicio, fim };
+  }
+
+  function labelDoMes(mesStr) {
+    const [ano, mes] = mesStr.split('-').map(Number);
+    const d = new Date(ano, mes - 1, 1);
+    return d.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+  }
+
+  function irParaMes(delta) {
+    const [ano, mes] = mesAtual.split('-').map(Number);
+    const d = new Date(ano, mes - 1 + delta, 1);
+    const novoMes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    window.location.href = `orcamento.html?mes=${novoMes}`;
+  }
+
+  document.getElementById('mesAnterior').addEventListener('click', () => irParaMes(-1));
+  document.getElementById('mesSeguinte').addEventListener('click', () => irParaMes(1));
+  document.getElementById('mesLabel').textContent = labelDoMes(mesAtual);
+
+  (async () => {
+    const userId = await fluxRequireSession();
+    if (!userId) return;
+
+    const { inicio, fim } = limitesDoMes(mesAtual);
+
+    const [{ data: categorias }, { data: despesas }] = await Promise.all([
+      flux.from('orcamento_categorias')
+        .select('id, nome, limite_mensal')
+        .eq('user_id', userId)
+        .eq('ativa', true)
+        .order('nome'),
+      flux.from('despesas')
+        .select('valor, categoria_id')
+        .eq('user_id', userId)
+        .gte('data', inicio)
+        .lte('data', fim)
+    ]);
+
+    const budgetCard = document.getElementById('budgetCard');
+    if (!categorias || categorias.length === 0) {
+      budgetCard.innerHTML = '<div class="empty-note">Ainda sem categorias.</div>';
+      return;
+    }
+
+    const gastosPorCategoria = {};
+    (despesas || []).forEach(d => {
+      gastosPorCategoria[d.categoria_id] = (gastosPorCategoria[d.categoria_id] || 0) + Number(d.valor);
+    });
+
+    budgetCard.innerHTML = categorias.map(cat => {
+      const gasto = gastosPorCategoria[cat.id] || 0;
+      const limite = Number(cat.limite_mensal);
+      const pct = limite > 0 ? Math.min(100, Math.round((gasto / limite) * 100)) : (gasto > 0 ? 100 : 0);
+      const corClasse = gasto > limite ? 'brick' : (pct >= 80 ? 'copper' : '');
+      return `
+        <a class="budget-row-link" href="orcamento-categoria.html?id=${cat.id}&mes=${mesAtual}">
+          <div class="budget-row">
+            <div class="budget-top">
+              <span class="budget-cat">${cat.nome}</span>
+              <span class="budget-amounts">€${euros(gasto)} / €${euros(limite)}</span>
+            </div>
+            <div class="budget-bar-track"><div class="budget-bar-fill ${corClasse}" style="width:${pct}%"></div></div>
+          </div>
+        </a>`;
+    }).join('');
+  })();
+</script>
+
 </body>
 </html>
