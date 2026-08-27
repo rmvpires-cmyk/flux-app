@@ -66,8 +66,19 @@
   </div>
 
   <div class="balance-card">
-    <div class="balance-label">Saldo atual</div>
-    <div class="balance-figure" id="saldoFigure">€0<span class="cents">,00</span></div>
+    <div class="limit-top">
+      <div>
+        <div class="balance-label">Saldo atual</div>
+        <div class="balance-figure" id="saldoFigure">€0<span class="cents">,00</span></div>
+      </div>
+      <button class="limit-edit-btn" id="editSaldoBtn">ajustar saldo</button>
+    </div>
+    <div class="limit-edit-form" id="editSaldoForm">
+      <input type="text" inputmode="decimal" id="novoSaldo">
+      <button type="button" id="guardarSaldoBtn">Guardar</button>
+      <button type="button" class="cancel" id="cancelarSaldoBtn">Cancelar</button>
+    </div>
+    <div class="empty-note" id="notaSaldo" style="padding-top:12px;">Atualiza este valor sempre que quiseres — não depende de registares movimentos.</div>
   </div>
 
   <a class="import-link" id="importarLink" href="#" style="margin-top:16px;">
@@ -197,6 +208,24 @@
     const { error } = await flux.from('contas').update({ nome, tipo, iban, cor }).eq('id', contaId);
     if (error) { alert('Erro ao guardar: ' + error.message); return; }
     document.getElementById('editForm').style.display = 'none';
+    await carregarConta();
+  });
+
+  document.getElementById('editSaldoBtn').addEventListener('click', () => {
+    if (!contaAtual) return;
+    document.getElementById('novoSaldo').value = String(contaAtual.saldo_atual).replace('.', ',');
+    document.getElementById('editSaldoForm').classList.add('open');
+  });
+  document.getElementById('cancelarSaldoBtn').addEventListener('click', () => {
+    document.getElementById('editSaldoForm').classList.remove('open');
+  });
+  document.getElementById('guardarSaldoBtn').addEventListener('click', async () => {
+    const txt = document.getElementById('novoSaldo').value.replace(',', '.').trim();
+    const novoSaldo = parseFloat(txt);
+    if (isNaN(novoSaldo)) { alert('Introduz um valor válido.'); return; }
+    const { error } = await flux.from('contas').update({ saldo_atual: novoSaldo }).eq('id', contaId);
+    if (error) { alert('Não foi possível guardar: ' + error.message); return; }
+    document.getElementById('editSaldoForm').classList.remove('open');
     await carregarConta();
   });
 
