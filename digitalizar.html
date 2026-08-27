@@ -9,17 +9,311 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
 <header>
-  <div class="eyebrow">FLUX</div>
-  <div class="greeting">Digitalizar fatura</div>
+  <a class="back-link" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Início
+  </a>
+  <div class="greeting" style="margin-top:10px;">Digitalizar fatura</div>
 </header>
+
 <main>
-  <p class="empty-note">Este ecrã ainda vai ser desenhado — vai incluir a captura de foto e a extração automática com IA.</p>
-  <a class="btn-link" href="index.html">← voltar ao início</a>
+  <div class="import-steps">
+    <div class="import-step-dot" data-step="1"></div>
+    <div class="import-step-dot" data-step="2"></div>
+  </div>
+
+  <!-- PASSO 1: foto/ficheiro -->
+  <div id="stepUpload">
+    <label class="upload-drop" id="uploadDrop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      <div id="uploadDropTexto">Toca para tirar foto ou escolher um ficheiro<br>(foto, imagem ou PDF da fatura/recibo)</div>
+      <input type="file" id="uFicheiro" accept="image/*,application/pdf" capture="environment">
+    </label>
+    <p class="empty-note" id="uploadErro" style="color:var(--brick);"></p>
+  </div>
+
+  <!-- PASSO 2: rever dados extraídos -->
+  <div id="stepReview" style="display:none;">
+    <div class="add-form" style="margin-top:16px;">
+      <div class="field">
+        <label>Fornecedor / descrição</label>
+        <input type="text" id="fFornecedor" placeholder="Ex: Continente">
+      </div>
+      <div class="field">
+        <label>Valor (€)</label>
+        <input type="text" inputmode="decimal" id="fValor" placeholder="0,00">
+      </div>
+      <div class="field">
+        <label>Data</label>
+        <input type="date" id="fData">
+      </div>
+      <div class="field">
+        <label>Conta</label>
+        <select id="fConta"></select>
+      </div>
+      <div class="field">
+        <label>Categoria</label>
+        <select id="fCategoria"></select>
+      </div>
+      <div class="field" id="fSubcategoriaWrap">
+        <label>Subcategoria (opcional)</label>
+        <select id="fSubcategoria"><option value="">— nenhuma —</option></select>
+      </div>
+      <div class="field">
+        <label class="checkbox-field"><input type="checkbox" id="fJaPaga" checked> Já foi paga</label>
+      </div>
+      <div class="field" id="fVencimentoWrap" style="display:none;">
+        <label>Data de vencimento</label>
+        <input type="date" id="fVencimento">
+      </div>
+      <p class="empty-note" id="avisoIA"></p>
+    </div>
+    <div class="add-form-actions" style="margin-top:16px;">
+      <button class="btn-secondary" id="rCancelarBtn">Cancelar</button>
+      <button class="btn-small-primary" id="rConfirmarBtn">Guardar</button>
+    </div>
+  </div>
+
+  <!-- PASSO 3: concluído -->
+  <div id="stepDone" style="display:none;">
+    <div class="limit-card" style="text-align:center; margin-top:24px;">
+      <div class="limit-label">Fatura guardada</div>
+      <div id="doneResumo" style="margin-top:10px; font-size:14px;"></div>
+      <a class="btn-primary" id="doneLink" style="display:block; margin-top:20px; text-decoration:none; text-align:center;" href="movimentos.html">Ver movimentos</a>
+    </div>
+  </div>
 </main>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="supabase-client.js"></script>
-<script>fluxRequireSession();</script>
+<script>
+  function euros(v){
+    const n = Number(v || 0);
+    return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function euroInput(v){ return String(v).replace(',', '.').trim(); }
+  function normalizar(txt){
+    return (txt || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  const PALAVRAS_GENERICAS = new Set([
+    'lda','unip','sa','plc','cl','companhia','compania','loja','estabelecimento','fatura','factura','recibo','talao'
+  ]);
+  function extrairPalavraChave(texto){
+    const tokens = normalizar(texto).replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ').split(/\s+/).filter(Boolean);
+    for (const t of tokens) {
+      if (t.length < 4) continue;
+      if (/^\d+$/.test(t)) continue;
+      if (PALAVRAS_GENERICAS.has(t)) continue;
+      return t;
+    }
+    return null;
+  }
+  function encontrarRegra(descNorm){
+    let melhor = null;
+    regrasGlobais.forEach(r => {
+      if (r.tipo === 'despesa' && descNorm.includes(r.padrao)) {
+        if (!melhor || r.padrao.length > melhor.padrao.length) melhor = r;
+      }
+    });
+    return melhor;
+  }
+
+  let userIdGlobal = null;
+  let contasGlobal = [];
+  let despesaCategoriasGlobal = [];
+  let subcategoriasGlobal = [];
+  let regrasGlobais = [];
+  let ficheiroSelecionado = null;
+  let ficheiroBase64 = null;
+  let ficheiroMediaType = null;
+
+  function irParaPasso(n){
+    document.getElementById('stepUpload').style.display = n === 1 ? '' : 'none';
+    document.getElementById('stepReview').style.display = n === 2 ? '' : 'none';
+    document.getElementById('stepDone').style.display = n === 3 ? '' : 'none';
+    document.querySelectorAll('.import-step-dot').forEach(dot => {
+      const s = Number(dot.dataset.step);
+      dot.classList.toggle('active', s === Math.min(n, 2));
+      dot.classList.toggle('done', s < n);
+    });
+  }
+
+  function fileParaBase64(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function carregarBaseDados(){
+    const [{ data: contas }, { data: cats }, { data: subcats }, { data: regras }] = await Promise.all([
+      flux.from('contas').select('id, nome').eq('user_id', userIdGlobal).eq('ativa', true).order('nome'),
+      flux.from('orcamento_categorias').select('id, nome').eq('user_id', userIdGlobal).eq('ativa', true).order('nome'),
+      flux.from('orcamento_subcategorias').select('id, nome, categoria_id').eq('user_id', userIdGlobal).eq('ativa', true).order('nome'),
+      flux.from('regras_categorizacao').select('tipo, padrao, categoria_id').eq('user_id', userIdGlobal)
+    ]);
+    contasGlobal = contas || [];
+    despesaCategoriasGlobal = cats || [];
+    subcategoriasGlobal = subcats || [];
+    regrasGlobais = regras || [];
+
+    document.getElementById('fConta').innerHTML = contasGlobal.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+    document.getElementById('fCategoria').innerHTML = despesaCategoriasGlobal.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  }
+
+  function atualizarSubcategorias(){
+    const catId = document.getElementById('fCategoria').value;
+    const opcoes = subcategoriasGlobal.filter(s => s.categoria_id === catId);
+    document.getElementById('fSubcategoria').innerHTML = '<option value="">— nenhuma —</option>' + opcoes.map(s => `<option value="${s.id}">${s.nome}</option>`).join('');
+  }
+
+  document.getElementById('uFicheiro').addEventListener('change', async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    document.getElementById('uploadErro').textContent = '';
+    ficheiroSelecionado = file;
+    ficheiroMediaType = file.type === 'application/pdf' ? 'application/pdf' : (file.type || 'image/jpeg');
+    document.getElementById('uploadDropTexto').textContent = 'A ler com IA — pode demorar alguns segundos…';
+
+    try {
+      ficheiroBase64 = await fileParaBase64(file);
+      const { data: { session } } = await flux.auth.getSession();
+      const resp = await fetch('/api/extrair-fatura', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ ficheiroBase64, mediaType: ficheiroMediaType })
+      });
+      const resultado = await resp.json();
+      if (!resp.ok) throw new Error(resultado.error || 'Erro desconhecido.');
+
+      const dados = resultado.dados || {};
+      document.getElementById('fFornecedor').value = dados.fornecedor || '';
+      document.getElementById('fValor').value = dados.valor != null ? String(dados.valor).replace('.', ',') : '';
+      document.getElementById('fData').value = dados.data_emissao || new Date().toISOString().slice(0,10);
+      document.getElementById('fJaPaga').checked = !dados.data_vencimento;
+      document.getElementById('fVencimentoWrap').style.display = dados.data_vencimento ? '' : 'none';
+      document.getElementById('fVencimento').value = dados.data_vencimento || '';
+      if (contasGlobal[0]) document.getElementById('fConta').value = contasGlobal[0].id;
+
+      const descNorm = normalizar(dados.fornecedor || '');
+      const regra = encontrarRegra(descNorm);
+      if (regra) document.getElementById('fCategoria').value = regra.categoria_id;
+      atualizarSubcategorias();
+
+      const avisos = [];
+      if (dados.fornecedor == null) avisos.push('fornecedor');
+      if (dados.valor == null) avisos.push('valor');
+      document.getElementById('avisoIA').textContent = avisos.length
+        ? `A IA não conseguiu ler: ${avisos.join(', ')}. Preenche à mão.`
+        : '';
+
+      document.getElementById('uploadDropTexto').textContent = 'Toca para tirar foto ou escolher um ficheiro (foto, imagem ou PDF da fatura/recibo)';
+      irParaPasso(2);
+    } catch (e) {
+      document.getElementById('uploadDropTexto').textContent = 'Toca para tirar foto ou escolher um ficheiro (foto, imagem ou PDF da fatura/recibo)';
+      document.getElementById('uploadErro').textContent = 'Erro a ler o ficheiro: ' + e.message;
+    }
+  });
+
+  document.getElementById('fCategoria').addEventListener('change', atualizarSubcategorias);
+  document.getElementById('fJaPaga').addEventListener('change', () => {
+    document.getElementById('fVencimentoWrap').style.display = document.getElementById('fJaPaga').checked ? 'none' : '';
+  });
+  document.getElementById('rCancelarBtn').addEventListener('click', () => {
+    ficheiroSelecionado = null; ficheiroBase64 = null;
+    document.getElementById('uFicheiro').value = '';
+    irParaPasso(1);
+  });
+
+  document.getElementById('rConfirmarBtn').addEventListener('click', async () => {
+    const fornecedor = document.getElementById('fFornecedor').value.trim();
+    const valor = parseFloat(euroInput(document.getElementById('fValor').value));
+    const data_emissao = document.getElementById('fData').value;
+    const conta_id = document.getElementById('fConta').value;
+    const categoria_id = document.getElementById('fCategoria').value;
+    const subcategoria_id = document.getElementById('fSubcategoria').value || null;
+    const jaPaga = document.getElementById('fJaPaga').checked;
+    const data_vencimento = jaPaga ? null : document.getElementById('fVencimento').value;
+
+    if (!valor || valor <= 0 || !data_emissao || !conta_id || !categoria_id) {
+      alert('Preenche pelo menos valor, data, conta e categoria.');
+      return;
+    }
+    if (!jaPaga && !data_vencimento) {
+      alert('Indica a data de vencimento, ou marca como já paga.');
+      return;
+    }
+
+    const btn = document.getElementById('rConfirmarBtn');
+    btn.disabled = true; btn.textContent = 'A guardar…';
+
+    try {
+      // 1. Sobe o ficheiro para o storage privado do utilizador
+      const ext = (ficheiroSelecionado.name.split('.').pop() || 'jpg').toLowerCase();
+      const caminho = `${userIdGlobal}/${Date.now()}.${ext}`;
+      const { error: erroUpload } = await flux.storage.from('facturas').upload(caminho, ficheiroSelecionado, {
+        contentType: ficheiroMediaType
+      });
+      if (erroUpload) throw new Error('Erro a guardar o ficheiro: ' + erroUpload.message);
+
+      // 2. Regista a fatura
+      const { data: fatura, error: erroFatura } = await flux.from('facturas').insert({
+        user_id: userIdGlobal, ficheiro_url: caminho, fornecedor: fornecedor || null, valor,
+        data_emissao, data_vencimento, categoria_id, subcategoria_id, conta_id,
+        estado: 'confirmada', ja_paga: jaPaga,
+        dados_extraidos: { fornecedor, valor, data_emissao, data_vencimento }
+      }).select().single();
+      if (erroFatura) throw new Error('Erro a registar a fatura: ' + erroFatura.message);
+
+      // 3. Já paga → cria a despesa direta; por pagar → entra na agenda de pagamentos
+      if (jaPaga) {
+        const { error: erroDespesa } = await flux.from('despesas').insert({
+          user_id: userIdGlobal, descricao: fornecedor || 'Fatura', valor, data: data_emissao,
+          conta_id, categoria_id, subcategoria_id, origem: 'fatura', factura_id: fatura.id
+        });
+        if (erroDespesa) throw new Error('Fatura guardada, mas houve erro a criar o movimento: ' + erroDespesa.message);
+      } else {
+        const { error: erroAgenda } = await flux.from('pagamentos_agenda').insert({
+          user_id: userIdGlobal, titulo: fornecedor || 'Fatura', valor, conta_id, categoria_id,
+          data_vencimento, factura_id: fatura.id
+        });
+        if (erroAgenda) throw new Error('Fatura guardada, mas houve erro a criar o lembrete: ' + erroAgenda.message);
+      }
+
+      // 4. Aprende a categoria para a próxima vez que aparecer este fornecedor
+      const palavra = extrairPalavraChave(fornecedor);
+      if (palavra) {
+        await flux.from('regras_categorizacao').upsert(
+          { user_id: userIdGlobal, tipo: 'despesa', padrao: palavra, categoria_id },
+          { onConflict: 'user_id,tipo,padrao' }
+        );
+      }
+
+      document.getElementById('doneResumo').textContent = jaPaga
+        ? `€${euros(valor)} registados como despesa.`
+        : `€${euros(valor)} adicionados aos próximos pagamentos.`;
+      document.getElementById('doneLink').href = jaPaga ? 'movimentos.html' : 'index.html';
+      irParaPasso(3);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Guardar';
+    }
+  });
+
+  (async () => {
+    userIdGlobal = await fluxRequireSession();
+    if (!userIdGlobal) return;
+    await carregarBaseDados();
+    irParaPasso(1);
+  })();
+</script>
+
 </body>
 </html>
