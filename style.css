@@ -155,11 +155,49 @@ main{ padding: 8px 18px 0; }
 .pay-badge.soon{ background: var(--copper); }
 .pay-badge.overdue{ background: var(--brick); }
 .pay-badge.later{ background: var(--current); }
+.pay-badge.paid{ background: var(--moss); }
 .pay-info{ flex:1; }
 .pay-title{ font-size: 14px; font-weight: 500; }
 .pay-sub{ font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
 .pay-amount{ font-family: var(--font-mono); font-size: 14px; font-weight: 600; }
+.pay-actions{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.pay-pay-btn{
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--moss);
+  background: none; border: 1px solid var(--moss); border-radius: 999px;
+  padding: 4px 10px; cursor:pointer;
+}
 .empty-note{ font-size: 12.5px; color: var(--ink-soft); padding: 8px 2px; }
+
+/* CALENDÁRIO */
+.cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-top: 16px; }
+.cal-nav button{ background:none; border:none; color: var(--ink-soft); cursor:pointer; padding: 6px; }
+.cal-nav button svg{ width: 20px; height: 20px; }
+.cal-label{ font-family: var(--font-mono); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.cal-weekdays{ display:grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 16px; }
+.cal-weekdays div{ text-align:center; font-size: 10px; color: var(--ink-faint); font-family: var(--font-mono); text-transform: uppercase; }
+.cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 6px; }
+.cal-day{
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap: 3px;
+  font-size: 12.5px;
+  color: var(--ink);
+  cursor:pointer;
+  background: var(--card);
+}
+.cal-day.empty{ visibility:hidden; cursor:default; border:none; }
+.cal-day.today{ border-color: var(--current); font-weight:600; }
+.cal-day.selected{ background: var(--current); border-color: var(--current); color:#fff; }
+.cal-day-dot{ width:5px; height:5px; border-radius:50%; }
+.cal-day-list-label{
+  font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--ink-faint); margin: 20px 2px 8px;
+}
 
 /* FAB + NAV */
 .scan-fab{

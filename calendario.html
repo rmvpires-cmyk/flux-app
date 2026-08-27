@@ -9,13 +9,32 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
 <header>
   <div class="eyebrow">FLUX</div>
   <div class="greeting">Calendário</div>
 </header>
+
 <main>
-  <p class="empty-note">Este ecrã ainda vai ser desenhado — por agora usa "Início" para ver o resumo.</p>
+  <div class="cal-nav">
+    <button id="mesAnterior" aria-label="Mês anterior">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="cal-label" id="mesLabel">—</div>
+    <button id="mesSeguinte" aria-label="Mês seguinte">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+  </div>
+
+  <div class="cal-weekdays">
+    <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+  </div>
+  <div class="cal-grid" id="calGrid"></div>
+
+  <div class="cal-day-list-label" id="listaLabel">Pagamentos</div>
+  <div class="pay-list" id="listaDia"><div class="empty-note">A carregar…</div></div>
 </main>
+
 <nav class="tabbar">
   <a class="tab" href="index.html">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
@@ -35,9 +54,182 @@
     Movimentos
   </a>
 </nav>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="supabase-client.js"></script>
-<script>fluxRequireSession();</script>
+<script>
+  function euros(v){
+    const n = Number(v || 0);
+    return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const mesesNomes = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const hojeISO = new Date().toISOString().slice(0,10);
+
+  let userIdGlobal = null;
+  let anoAtual, mesAtual; // mesAtual: 1-12
+  let pagamentosGlobal = [];
+  let pagamentosPorDia = {};
+  let diaSelecionado = null;
+
+  function mesStr(){ return `${anoAtual}-${String(mesAtual).padStart(2,'0')}`; }
+  function inicioMes(){ return `${mesStr()}-01`; }
+  function fimMes(){ const d = new Date(anoAtual, mesAtual, 0); return d.toISOString().slice(0,10); }
+
+  async function carregarPagamentos(){
+    document.getElementById('mesLabel').textContent = `${mesesNomes[mesAtual-1]} ${anoAtual}`;
+    const { data, error } = await flux
+      .from('pagamentos_agenda')
+      .select('id, titulo, valor, conta_id, categoria_id, data_vencimento, estado')
+      .eq('user_id', userIdGlobal)
+      .gte('data_vencimento', inicioMes())
+      .lte('data_vencimento', fimMes())
+      .order('data_vencimento', { ascending: true });
+
+    if (error) {
+      document.getElementById('listaDia').innerHTML = '<div class="empty-note">Erro a carregar pagamentos.</div>';
+      return;
+    }
+    pagamentosGlobal = data || [];
+    pagamentosPorDia = {};
+    pagamentosGlobal.forEach(p => {
+      (pagamentosPorDia[p.data_vencimento] = pagamentosPorDia[p.data_vencimento] || []).push(p);
+    });
+
+    // seleciona hoje se for o mês atual e tiver pagamentos; senão o primeiro dia do mês com pagamentos; senão nada
+    if (hojeISO.startsWith(mesStr()) && pagamentosPorDia[hojeISO]) {
+      diaSelecionado = hojeISO;
+    } else {
+      const dias = Object.keys(pagamentosPorDia).sort();
+      diaSelecionado = dias.length ? dias[0] : null;
+    }
+
+    renderGrid();
+    renderLista();
+  }
+
+  function renderGrid(){
+    const grid = document.getElementById('calGrid');
+    const primeiroDiaSemana = new Date(anoAtual, mesAtual - 1, 1).getDay(); // 0=Dom
+    const totalDias = new Date(anoAtual, mesAtual, 0).getDate();
+
+    let html = '';
+    for (let i = 0; i < primeiroDiaSemana; i++) html += '<div class="cal-day empty"></div>';
+    for (let d = 1; d <= totalDias; d++) {
+      const iso = `${mesStr()}-${String(d).padStart(2,'0')}`;
+      const pags = pagamentosPorDia[iso] || [];
+      let corDot = null;
+      if (pags.some(p => p.estado === 'atrasado')) corDot = 'var(--brick)';
+      else if (pags.some(p => p.estado === 'pendente')) corDot = 'var(--copper)';
+      else if (pags.length) corDot = 'var(--moss)';
+
+      const classes = ['cal-day'];
+      if (iso === hojeISO) classes.push('today');
+      if (iso === diaSelecionado) classes.push('selected');
+
+      html += `<div class="${classes.join(' ')}" data-dia="${iso}">
+        <span>${d}</span>
+        ${corDot ? `<span class="cal-day-dot" style="background:${diaSelecionado === iso ? '#fff' : corDot}"></span>` : ''}
+      </div>`;
+    }
+    grid.innerHTML = html;
+
+    grid.querySelectorAll('.cal-day:not(.empty)').forEach(cel => {
+      cel.addEventListener('click', () => {
+        diaSelecionado = cel.dataset.dia;
+        renderGrid();
+        renderLista();
+      });
+    });
+  }
+
+  function renderLista(){
+    const label = document.getElementById('listaLabel');
+    const lista = document.getElementById('listaDia');
+
+    if (!diaSelecionado) {
+      label.textContent = 'Pagamentos';
+      lista.innerHTML = '<div class="empty-note">Sem pagamentos agendados neste mês.</div>';
+      return;
+    }
+
+    const dataFmt = new Date(diaSelecionado + 'T00:00:00').toLocaleDateString('pt-PT', { weekday:'long', day:'numeric', month:'long' });
+    label.textContent = dataFmt;
+
+    const pags = (pagamentosPorDia[diaSelecionado] || []).slice().sort((a,b) => a.titulo.localeCompare(b.titulo));
+    if (pags.length === 0) {
+      lista.innerHTML = '<div class="empty-note">Sem pagamentos neste dia.</div>';
+      return;
+    }
+
+    lista.innerHTML = pags.map(p => {
+      let badgeClasse, badgeTexto;
+      if (p.estado === 'pago') { badgeClasse = 'paid'; badgeTexto = 'PAGO'; }
+      else if (p.estado === 'atrasado') { badgeClasse = 'overdue'; badgeTexto = 'ATRASADO'; }
+      else { badgeClasse = 'later'; badgeTexto = 'PENDENTE'; }
+      return `
+        <div class="pay-card">
+          <div class="pay-badge ${badgeClasse}">${badgeTexto}</div>
+          <div class="pay-info">
+            <div class="pay-title">${p.titulo}</div>
+            <div class="pay-sub">€${euros(p.valor)}</div>
+          </div>
+          ${p.estado !== 'pago' ? `<div class="pay-actions"><button class="pay-pay-btn" data-id="${p.id}">Marcar pago</button></div>` : ''}
+        </div>`;
+    }).join('');
+
+    lista.querySelectorAll('.pay-pay-btn').forEach(btn => {
+      btn.addEventListener('click', () => marcarComoPago(btn.dataset.id));
+    });
+  }
+
+  async function marcarComoPago(id){
+    const pagamento = pagamentosGlobal.find(p => p.id === id);
+    if (!pagamento) return;
+    if (!confirm(`Marcar "${pagamento.titulo}" (€${euros(pagamento.valor)}) como pago? Isto cria a despesa correspondente.`)) return;
+
+    const { data: despesa, error: erroDespesa } = await flux
+      .from('despesas')
+      .insert({
+        user_id: userIdGlobal, descricao: pagamento.titulo, valor: pagamento.valor,
+        data: pagamento.data_vencimento, conta_id: pagamento.conta_id, categoria_id: pagamento.categoria_id,
+        origem: 'agenda'
+      })
+      .select().single();
+    if (erroDespesa) { alert('Erro ao criar a despesa: ' + erroDespesa.message); return; }
+
+    const { error: erroPagamento } = await flux
+      .from('pagamentos_agenda')
+      .update({ estado: 'pago', despesa_id: despesa.id })
+      .eq('id', id);
+    if (erroPagamento) { alert('Despesa criada, mas houve erro a atualizar o pagamento: ' + erroPagamento.message); }
+
+    await carregarPagamentos();
+  }
+
+  (async () => {
+    userIdGlobal = await fluxRequireSession();
+    if (!userIdGlobal) return;
+
+    const hoje = new Date();
+    anoAtual = hoje.getFullYear();
+    mesAtual = hoje.getMonth() + 1;
+
+    await carregarPagamentos();
+
+    document.getElementById('mesAnterior').addEventListener('click', () => {
+      mesAtual--; if (mesAtual < 1) { mesAtual = 12; anoAtual--; }
+      diaSelecionado = null;
+      carregarPagamentos();
+    });
+    document.getElementById('mesSeguinte').addEventListener('click', () => {
+      mesAtual++; if (mesAtual > 12) { mesAtual = 1; anoAtual++; }
+      diaSelecionado = null;
+      carregarPagamentos();
+    });
+  })();
+</script>
+
 </body>
 </html>
