@@ -10,18 +10,21 @@ const flux = window.supabase.createClient(
 
 // Garante que há sessão ativa; se não houver, manda para o login.
 // Se este aparelho tiver o cadeado por biometria ativado para este utilizador,
-// bloqueia o ecrã até confirmar a biometria antes de devolver o user_id.
+// bloqueia o ecrã até confirmar a biometria antes de devolver o user_id — mas só
+// pede uma vez por período (ver fluxBiometriaDesbloqueadoRecente), não a cada
+// mudança de página/menu dentro da mesma visita à app.
 async function fluxRequireSession() {
   const { data: { session } } = await flux.auth.getSession();
   if (!session) {
     window.location.href = 'login.html';
     return null;
   }
-  const credId = localStorage.getItem(fluxBiometriaChave(session.user.id));
-  if (credId && window.PublicKeyCredential) {
-    await fluxBiometriaExigir(credId);
+  const userId = session.user.id;
+  const credId = localStorage.getItem(fluxBiometriaChave(userId));
+  if (credId && window.PublicKeyCredential && !fluxBiometriaDesbloqueadoRecente(userId)) {
+    await fluxBiometriaExigir(credId, userId);
   }
-  return session.user.id;
+  return userId;
 }
 
 async function fluxSignOut() {
@@ -37,6 +40,19 @@ async function fluxSignOut() {
 // aparelho tem de ser ativado separadamente em Definições.
 // ============================================================
 function fluxBiometriaChave(userId) { return `flux_biometria_${userId}`; }
+
+// Depois de desbloquear com sucesso, fica "recente" durante uns minutos nesta
+// aba do browser (sessionStorage — desaparece ao fechar a aba/o browser) para
+// não pedir biometria outra vez em cada página/menu que visitas.
+const FLUX_BIOMETRIA_VALIDADE_MS = 15 * 60 * 1000; // 15 minutos
+function fluxBiometriaChaveDesbloqueio(userId) { return `flux_biometria_ok_${userId}`; }
+function fluxBiometriaMarcarDesbloqueado(userId) {
+  sessionStorage.setItem(fluxBiometriaChaveDesbloqueio(userId), String(Date.now()));
+}
+function fluxBiometriaDesbloqueadoRecente(userId) {
+  const t = Number(sessionStorage.getItem(fluxBiometriaChaveDesbloqueio(userId)) || 0);
+  return t > 0 && (Date.now() - t) < FLUX_BIOMETRIA_VALIDADE_MS;
+}
 
 function fluxBiometriaAtiva(userId) {
   return !!localStorage.getItem(fluxBiometriaChave(userId));
@@ -96,7 +112,7 @@ async function fluxBiometriaConfirmar(credId) {
 
 // Mostra um ecrã de bloqueio de página inteira até a biometria ser confirmada
 // (ou o utilizador terminar sessão a partir daí). Bloqueia a execução da página.
-function fluxBiometriaExigir(credId) {
+function fluxBiometriaExigir(credId, userId) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.id = 'fluxLockOverlay';
@@ -115,6 +131,7 @@ function fluxBiometriaExigir(credId) {
       msg.textContent = '';
       const ok = await fluxBiometriaConfirmar(credId);
       if (ok) {
+        fluxBiometriaMarcarDesbloqueado(userId);
         overlay.remove();
         resolve();
       } else {
