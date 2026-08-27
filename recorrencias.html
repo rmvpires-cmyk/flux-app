@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flux — Recorrências</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">FLUX</div>
+  <div class="greeting">Recorrências</div>
+</header>
+
+<main>
+  <a class="back-link" href="movimentos.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Movimentos
+  </a>
+
+  <div class="empty-note" style="padding-top:14px;">Pausa, edita ou apaga aqui as despesas, receitas e transferências que se repetem sozinhas. Para criar uma nova, usa "+ Novo movimento" em Movimentos e ativa "Repetir automaticamente".</div>
+
+  <div class="section-head">
+    <div class="section-title">Despesas</div>
+  </div>
+  <div class="rec-list" id="listaDespesas"><div class="empty-note">A carregar…</div></div>
+
+  <div class="section-head">
+    <div class="section-title">Receitas</div>
+  </div>
+  <div class="rec-list" id="listaReceitas"><div class="empty-note">A carregar…</div></div>
+
+  <div class="section-head">
+    <div class="section-title">Transferências</div>
+  </div>
+  <div class="rec-list" id="listaTransferencias"><div class="empty-note">A carregar…</div></div>
+</main>
+
+<nav class="tabbar">
+  <a class="tab" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+    Início
+  </a>
+  <a class="tab" href="orcamento.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9M3 12h9V3"/></svg>
+    Orçamento
+  </a>
+  <div class="tab spacer"></div>
+  <a class="tab" href="calendario.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+    Calendário
+  </a>
+  <a class="tab active" href="movimentos.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></svg>
+    Movimentos
+  </a>
+</nav>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script>
+  function euros(v){
+    const n = Number(v || 0);
+    return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const diasSemana = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const mesesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  let userIdGlobal = null;
+  let contasGlobal = [];
+  let despesaCategoriasGlobal = [];
+  let receitaCategoriasGlobal = [];
+
+  function nomeConta(id){ return contasGlobal.find(c => c.id === id)?.nome || '—'; }
+  function categoriaInfo(lista, id){ return lista.find(c => c.id === id); }
+
+  function freqTexto(r){
+    if (r.frequencia === 'diaria') return 'Todos os dias';
+    if (r.frequencia === 'semanal') return `Toda ${diasSemana[r.dia_semana]}`;
+    if (r.frequencia === 'quinzenal') return `Quinzenal (${diasSemana[r.dia_semana]})`;
+    if (r.frequencia === 'mensal') return `Dia ${r.dia_mes} de cada mês`;
+    if (r.frequencia === 'anual') return `${r.dia_mes} de ${mesesNomes[r.mes_referencia - 1]}`;
+    return r.frequencia;
+  }
+
+  async function carregarBaseDados(){
+    const [{ data: contas }, { data: catsDespesa }, { data: catsReceita }] = await Promise.all([
+      flux.from('contas').select('id, nome').eq('user_id', userIdGlobal),
+      flux.from('orcamento_categorias').select('id, nome, cor').eq('user_id', userIdGlobal),
+      flux.from('receitas_categorias').select('id, nome, cor').eq('user_id', userIdGlobal)
+    ]);
+    contasGlobal = contas || [];
+    despesaCategoriasGlobal = catsDespesa || [];
+    receitaCategoriasGlobal = catsReceita || [];
+  }
+
+  function renderLista(containerId, itens, montarInfo, tabela){
+    const container = document.getElementById(containerId);
+    if (!itens || itens.length === 0) {
+      container.innerHTML = '<div class="empty-note">Sem recorrências.</div>';
+      return;
+    }
+    container.innerHTML = itens.map(r => {
+      const { cor, partes } = montarInfo(r);
+      return `
+        <div class="rec-row ${r.ativo ? '' : 'paused'}" data-id="${r.id}">
+          <span class="mov-dot" style="background:${cor}"></span>
+          <div class="mov-info">
+            <div class="mov-desc">${r.descricao}${r.ativo ? '' : ' (pausada)'}</div>
+            <div class="mov-sub">${partes.join(' · ')}</div>
+          </div>
+          <div class="mov-amount">€${euros(r.valor)}</div>
+          <div class="row-actions">
+            <button class="icon-btn" data-acao="toggle" title="${r.ativo ? 'Pausar' : 'Retomar'}">
+              ${r.ativo
+                ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>'
+                : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l14 8-14 8V4Z"/></svg>'}
+            </button>
+            <button class="icon-btn danger" data-acao="apagar" title="Apagar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg>
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+
+    container.querySelectorAll('[data-acao="toggle"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.closest('.rec-row').dataset.id;
+        const item = itens.find(x => x.id === id);
+        await flux.from(tabela).update({ ativo: !item.ativo }).eq('id', id);
+        carregarTudo();
+      });
+    });
+    container.querySelectorAll('[data-acao="apagar"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.closest('.rec-row').dataset.id;
+        if (!confirm('Apagar esta recorrência? Os movimentos já criados por ela mantêm-se.')) return;
+        await flux.from(tabela).delete().eq('id', id);
+        carregarTudo();
+      });
+    });
+  }
+
+  async function carregarTudo(){
+    const [{ data: despesas }, { data: receitas }, { data: transferencias }] = await Promise.all([
+      flux.from('despesas_recorrentes').select('*').eq('user_id', userIdGlobal).order('ativo', { ascending: false }).order('created_at', { ascending: false }),
+      flux.from('receitas_recorrentes').select('*').eq('user_id', userIdGlobal).order('ativo', { ascending: false }).order('created_at', { ascending: false }),
+      flux.from('transferencias_recorrentes').select('*').eq('user_id', userIdGlobal).order('ativo', { ascending: false }).order('created_at', { ascending: false })
+    ]);
+
+    renderLista('listaDespesas', despesas, r => {
+      const cat = categoriaInfo(despesaCategoriasGlobal, r.categoria_id);
+      return { cor: cat?.cor || '#8A9A9C', partes: [cat?.nome || 'Sem categoria', nomeConta(r.conta_id), freqTexto(r)] };
+    }, 'despesas_recorrentes');
+
+    renderLista('listaReceitas', receitas, r => {
+      const cat = categoriaInfo(receitaCategoriasGlobal, r.categoria_id);
+      return { cor: cat?.cor || '#8A9A9C', partes: [cat?.nome || 'Sem categoria', nomeConta(r.conta_id), freqTexto(r)] };
+    }, 'receitas_recorrentes');
+
+    renderLista('listaTransferencias', transferencias, r => {
+      return { cor: '#4E6167', partes: [`${nomeConta(r.conta_origem_id)} → ${nomeConta(r.conta_destino_id)}`, freqTexto(r)] };
+    }, 'transferencias_recorrentes');
+  }
+
+  (async () => {
+    userIdGlobal = await fluxRequireSession();
+    if (!userIdGlobal) return;
+    await carregarBaseDados();
+    await carregarTudo();
+  })();
+</script>
+
+</body>
+</html>

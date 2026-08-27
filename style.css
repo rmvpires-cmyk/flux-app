@@ -517,6 +517,8 @@ table.budget-grid td.cell.warn .g{ color: var(--copper); }
 .auth-wrap{ padding: 60px 26px 26px; }
 .field{ margin-top: 16px; }
 .field label{ font-size: 12.5px; color: var(--ink-soft); display:block; margin-bottom: 6px; }
+.checkbox-field{ display:flex !important; align-items:center; gap:8px; font-size: 13.5px; color: var(--ink); margin-bottom:0 !important; cursor:pointer; }
+.checkbox-field input{ width:auto; }
 .field input{
   width: 100%;
   padding: 12px 14px;
@@ -633,6 +635,18 @@ table.budget-grid td.cell.warn .g{ color: var(--copper); }
 .mov-amount{ font-family: var(--font-mono); font-size: 14px; font-weight: 600; flex-shrink:0; }
 .mov-amount.pos{ color: var(--moss); }
 .mov-amount.neg{ color: var(--brick); }
+
+.rec-row{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display:flex;
+  align-items:center;
+  gap: 12px;
+}
+.rec-row.paused{ opacity: 0.5; }
+.rec-list{ display:flex; flex-direction:column; gap: 8px; }
 
 .segmented{ display:flex; border: 1px solid var(--line); border-radius: 10px; overflow:hidden; }
 .segmented button{

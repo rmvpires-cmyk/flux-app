@@ -33,6 +33,11 @@
     <input class="search-input" id="filtroTexto" type="text" placeholder="Procurar por descrição…">
   </div>
 
+  <div class="section-head" style="margin-top:0;">
+    <div></div>
+    <a class="section-link" href="recorrencias.html">recorrências →</a>
+  </div>
+
   <button class="toggle-add-btn" id="toggleAddBtn">+ Novo movimento</button>
 
   <div class="add-form" id="movForm" style="display:none;">
@@ -72,6 +77,62 @@
     <div class="field">
       <label>Notas (opcional)</label>
       <input type="text" id="fNotas">
+    </div>
+    <div class="field" id="fRepetirWrap">
+      <label class="checkbox-field"><input type="checkbox" id="fRepetir"> 🔁 Repetir automaticamente</label>
+    </div>
+    <div id="fRecorrenciaFields" style="display:none;">
+      <div class="field">
+        <label>Frequência</label>
+        <select id="fFrequencia">
+          <option value="diaria">Diária</option>
+          <option value="semanal">Semanal</option>
+          <option value="quinzenal">Quinzenal</option>
+          <option value="mensal">Mensal</option>
+          <option value="anual">Anual</option>
+        </select>
+      </div>
+      <div class="field" id="fDiaSemanaWrap" style="display:none;">
+        <label>Dia da semana</label>
+        <select id="fDiaSemana">
+          <option value="0">Domingo</option>
+          <option value="1">Segunda</option>
+          <option value="2">Terça</option>
+          <option value="3">Quarta</option>
+          <option value="4">Quinta</option>
+          <option value="5">Sexta</option>
+          <option value="6">Sábado</option>
+        </select>
+      </div>
+      <div class="field" id="fDiaMesWrap" style="display:none;">
+        <label>Dia do mês</label>
+        <input type="number" min="1" max="31" id="fDiaMes" value="1">
+      </div>
+      <div class="field" id="fMesRefWrap" style="display:none;">
+        <label>Mês</label>
+        <select id="fMesRef">
+          <option value="1">Janeiro</option>
+          <option value="2">Fevereiro</option>
+          <option value="3">Março</option>
+          <option value="4">Abril</option>
+          <option value="5">Maio</option>
+          <option value="6">Junho</option>
+          <option value="7">Julho</option>
+          <option value="8">Agosto</option>
+          <option value="9">Setembro</option>
+          <option value="10">Outubro</option>
+          <option value="11">Novembro</option>
+          <option value="12">Dezembro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Até (opcional)</label>
+        <input type="date" id="fDataFim">
+      </div>
+      <div class="field" id="fCriaPagamentoWrap" style="display:none;">
+        <label class="checkbox-field"><input type="checkbox" id="fCriaPagamento"> Criar como lembrete a confirmar (em vez de despesa automática)</label>
+      </div>
+      <div class="empty-note">A primeira ocorrência é criada automaticamente todos os dias às 5h — a data acima marca só a partir de quando começa.</div>
     </div>
     <div class="add-form-actions">
       <button class="btn-secondary" id="cancelarMovBtn">Cancelar</button>
@@ -169,6 +230,7 @@
     }
     document.getElementById('fSubcategoriaWrap').style.display = tipoFormAtual === 'despesa' ? '' : 'none';
     atualizarSelectSubcategoria();
+    atualizarCamposRecorrencia();
   }
 
   function atualizarSelectSubcategoria(){
@@ -284,9 +346,21 @@
     document.getElementById('fDescricao').value = '';
     document.getElementById('fValor').value = '';
     document.getElementById('fNotas').value = '';
+    document.getElementById('fRepetir').checked = false;
+    document.getElementById('fRecorrenciaFields').style.display = 'none';
+    document.getElementById('fDataFim').value = '';
+    document.getElementById('fCriaPagamento').checked = false;
     document.getElementById('guardarMovBtn').textContent = 'Guardar';
     const apagarBtn = document.getElementById('apagarMovBtn');
     if (apagarBtn) apagarBtn.style.display = 'none';
+  }
+
+  function atualizarCamposRecorrencia(){
+    const freq = document.getElementById('fFrequencia').value;
+    document.getElementById('fDiaSemanaWrap').style.display = (freq === 'semanal' || freq === 'quinzenal') ? '' : 'none';
+    document.getElementById('fDiaMesWrap').style.display = (freq === 'mensal' || freq === 'anual') ? '' : 'none';
+    document.getElementById('fMesRefWrap').style.display = (freq === 'anual') ? '' : 'none';
+    document.getElementById('fCriaPagamentoWrap').style.display = (tipoFormAtual === 'despesa') ? '' : 'none';
   }
 
   function abrirNovo(){
@@ -296,6 +370,7 @@
     atualizarSelectCategoriaForm();
     document.getElementById('fData').value = new Date().toISOString().slice(0,10);
     if (contasGlobal[0]) document.getElementById('fConta').value = contasGlobal[0].id;
+    document.getElementById('fRepetirWrap').style.display = '';
     abrirFormulario();
   }
 
@@ -332,6 +407,7 @@
       if (m.subcategoria_id) document.getElementById('fSubcategoria').value = m.subcategoria_id;
     }
 
+    document.getElementById('fRepetirWrap').style.display = 'none';
     document.getElementById('guardarMovBtn').textContent = 'Guardar alterações';
     abrirFormulario();
 
@@ -376,6 +452,8 @@
       return;
     }
 
+    const repetir = !editandoId && document.getElementById('fRepetir').checked;
+
     let payload;
     if (tipoFormAtual === 'transferencia') {
       const conta_origem_id = document.getElementById('fConta').value;
@@ -396,6 +474,42 @@
       }
       payload = { user_id: userIdGlobal, descricao, valor, data, conta_id, categoria_id, notas };
       if (tipoFormAtual === 'despesa') payload.subcategoria_id = subcategoria_id;
+    }
+
+    if (repetir) {
+      const freq = document.getElementById('fFrequencia').value;
+      const dia_semana = (freq === 'semanal' || freq === 'quinzenal') ? Number(document.getElementById('fDiaSemana').value) : null;
+      const dia_mes = (freq === 'mensal' || freq === 'anual') ? Number(document.getElementById('fDiaMes').value) : null;
+      const mes_referencia = (freq === 'anual') ? Number(document.getElementById('fMesRef').value) : null;
+      if ((freq === 'mensal' || freq === 'anual') && (!dia_mes || dia_mes < 1 || dia_mes > 31)) {
+        alert('Indica um dia do mês válido (1-31).');
+        return;
+      }
+      const data_fim = document.getElementById('fDataFim').value || null;
+
+      let recPayload = {
+        user_id: userIdGlobal, descricao: payload.descricao, valor, frequencia: freq,
+        dia_semana, dia_mes, mes_referencia, data_inicio: data, data_fim, ativo: true
+      };
+      if (tipoFormAtual === 'transferencia') {
+        recPayload.conta_origem_id = payload.conta_origem_id;
+        recPayload.conta_destino_id = payload.conta_destino_id;
+        recPayload.notas = notas;
+      } else {
+        recPayload.conta_id = payload.conta_id;
+        recPayload.categoria_id = payload.categoria_id;
+        if (tipoFormAtual === 'despesa') {
+          recPayload.subcategoria_id = payload.subcategoria_id;
+          recPayload.cria_pagamento_agenda = document.getElementById('fCriaPagamento').checked;
+        }
+      }
+
+      const tabelaRec = tabelaDoTipo(tipoFormAtual) + '_recorrentes';
+      const { error: erroRec } = await flux.from(tabelaRec).insert(recPayload);
+      if (erroRec) { alert('Erro ao criar recorrência: ' + erroRec.message); return; }
+      fecharFormulario();
+      alert('Recorrência criada. A primeira ocorrência nasce automaticamente na data marcada.');
+      return;
     }
 
     const tabela = tabelaDoTipo(tipoFormAtual);
@@ -442,6 +556,10 @@
     document.getElementById('cancelarMovBtn').addEventListener('click', fecharFormulario);
     document.getElementById('guardarMovBtn').addEventListener('click', guardarMovimento);
     document.getElementById('fCategoria').addEventListener('change', atualizarSelectSubcategoria);
+    document.getElementById('fRepetir').addEventListener('change', () => {
+      document.getElementById('fRecorrenciaFields').style.display = document.getElementById('fRepetir').checked ? '' : 'none';
+    });
+    document.getElementById('fFrequencia').addEventListener('change', atualizarCamposRecorrencia);
 
     document.querySelectorAll('#tipoSegmented button').forEach(btn => {
       btn.addEventListener('click', () => {
