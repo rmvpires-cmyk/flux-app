@@ -148,15 +148,18 @@
     const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
     const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
 
-    const [{ data: mov }, { data: catsD }, { data: catsR }] = await Promise.all([
+    const [{ data: mov }, { data: catsD }, { data: catsR }, { data: contas }] = await Promise.all([
       flux.from('vw_movimentos').select('*').eq('user_id', userIdGlobal).eq('conta_id', contaId)
         .gte('data', inicioMes).lte('data', fimMes)
         .order('data', { ascending: false }).order('created_at', { ascending: false }).limit(10),
       flux.from('orcamento_categorias').select('id, nome, cor').eq('user_id', userIdGlobal),
-      flux.from('receitas_categorias').select('id, nome, cor').eq('user_id', userIdGlobal)
+      flux.from('receitas_categorias').select('id, nome, cor').eq('user_id', userIdGlobal),
+      flux.from('contas').select('id, nome').eq('user_id', userIdGlobal)
     ]);
     despesaCategoriasGlobal = catsD || [];
     receitaCategoriasGlobal = catsR || [];
+    const contasPorId = {};
+    (contas || []).forEach(c => { contasPorId[c.id] = c.nome; });
 
     const lista = document.getElementById('movList');
     if (!mov || mov.length === 0) {
@@ -164,17 +167,26 @@
       return;
     }
     lista.innerHTML = mov.map(m => {
-      const cats = m.tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
-      const cat = cats.find(c => c.id === m.categoria_id);
-      const sinal = m.tipo === 'receita' ? '+' : '−';
-      const classe = m.tipo === 'receita' ? 'pos' : 'neg';
+      const sinal = Number(m.valor_sinal) >= 0 ? '+' : '−';
+      const classe = Number(m.valor_sinal) >= 0 ? 'pos' : 'neg';
       const dataFmt = new Date(m.data + 'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
+      let corDot, subLinha;
+      if (m.tipo === 'transferencia') {
+        corDot = '#4E6167';
+        const destinoOuOrigem = Number(m.valor_sinal) < 0 ? 'para' : 'de';
+        subLinha = `Transferência ${destinoOuOrigem} ${contasPorId[m.conta_contraparte_id] || '—'} · ${dataFmt}`;
+      } else {
+        const cats = m.tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
+        const cat = cats.find(c => c.id === m.categoria_id);
+        corDot = cat?.cor || '#8A9A9C';
+        subLinha = `${cat?.nome || 'Sem categoria'} · ${dataFmt}`;
+      }
       return `
         <div class="mov-row" style="cursor:default;">
-          <span class="mov-dot" style="background:${cat?.cor || '#8A9A9C'}"></span>
+          <span class="mov-dot" style="background:${corDot}"></span>
           <div class="mov-info">
             <div class="mov-desc">${m.descricao}</div>
-            <div class="mov-sub">${cat?.nome || 'Sem categoria'} · ${dataFmt}</div>
+            <div class="mov-sub">${subLinha}</div>
           </div>
           <div class="mov-amount ${classe}">${sinal}€${euros(m.valor)}</div>
         </div>`;

@@ -39,9 +39,10 @@
     <div class="segmented" id="tipoSegmented">
       <button type="button" class="active" data-tipo="despesa">Despesa</button>
       <button type="button" data-tipo="receita">Receita</button>
+      <button type="button" data-tipo="transferencia">Transferência</button>
     </div>
     <div class="field">
-      <label>Descrição</label>
+      <label>Descrição<span id="fDescricaoOpcional" style="display:none;"> (opcional)</span></label>
       <input type="text" id="fDescricao" placeholder="Ex: Supermercado">
     </div>
     <div class="field">
@@ -53,10 +54,14 @@
       <input type="date" id="fData">
     </div>
     <div class="field">
-      <label>Conta</label>
+      <label id="fContaLabel">Conta</label>
       <select id="fConta"></select>
     </div>
-    <div class="field">
+    <div class="field" id="fContaDestinoWrap" style="display:none;">
+      <label>Para a conta</label>
+      <select id="fContaDestino"></select>
+    </div>
+    <div class="field" id="fCategoriaWrap">
       <label>Categoria</label>
       <select id="fCategoria"></select>
     </div>
@@ -140,8 +145,10 @@
     subcategoriasGlobal = subcats || [];
 
     const fConta = document.getElementById('fConta');
+    const fContaDestino = document.getElementById('fContaDestino');
     const filtroConta = document.getElementById('filtroConta');
     fConta.innerHTML = contasGlobal.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+    fContaDestino.innerHTML = contasGlobal.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
     filtroConta.innerHTML = '<option value="">Todas as contas</option>' + contasGlobal.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
 
     atualizarSelectCategoriaForm();
@@ -149,9 +156,17 @@
   }
 
   function atualizarSelectCategoriaForm(){
-    const fCategoria = document.getElementById('fCategoria');
-    const lista = tipoFormAtual === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
-    fCategoria.innerHTML = lista.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+    const ehTransferencia = tipoFormAtual === 'transferencia';
+    document.getElementById('fContaLabel').textContent = ehTransferencia ? 'De (conta de origem)' : 'Conta';
+    document.getElementById('fContaDestinoWrap').style.display = ehTransferencia ? '' : 'none';
+    document.getElementById('fCategoriaWrap').style.display = ehTransferencia ? 'none' : '';
+    document.getElementById('fDescricaoOpcional').style.display = ehTransferencia ? '' : 'none';
+
+    if (!ehTransferencia) {
+      const fCategoria = document.getElementById('fCategoria');
+      const lista = tipoFormAtual === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
+      fCategoria.innerHTML = lista.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+    }
     document.getElementById('fSubcategoriaWrap').style.display = tipoFormAtual === 'despesa' ? '' : 'none';
     atualizarSelectSubcategoria();
   }
@@ -226,15 +241,23 @@
     container.innerHTML = dias.map(dia => {
       const dataFmt = new Date(dia + 'T00:00:00').toLocaleDateString('pt-PT', { weekday:'short', day:'numeric', month:'short' });
       const linhas = grupos[dia].map(m => {
-        const cat = categoriaInfo(m.tipo, m.categoria_id);
-        const subNome = m.subcategoria_id ? nomeSubcategoria(m.subcategoria_id) : null;
-        const partes = [cat?.nome || 'Sem categoria', nomeConta(m.conta_id)];
-        if (subNome) partes.splice(1, 0, subNome);
-        const sinal = m.tipo === 'receita' ? '+' : '−';
-        const classe = m.tipo === 'receita' ? 'pos' : 'neg';
+        const sinal = Number(m.valor_sinal) >= 0 ? '+' : '−';
+        const classe = Number(m.valor_sinal) >= 0 ? 'pos' : 'neg';
+        let corDot, partes;
+        if (m.tipo === 'transferencia') {
+          corDot = '#4E6167';
+          const destinoOuOrigem = Number(m.valor_sinal) < 0 ? 'para' : 'de';
+          partes = [`Transferência ${destinoOuOrigem} ${nomeConta(m.conta_contraparte_id)}`];
+        } else {
+          const cat = categoriaInfo(m.tipo, m.categoria_id);
+          const subNome = m.subcategoria_id ? nomeSubcategoria(m.subcategoria_id) : null;
+          corDot = cat?.cor || '#8A9A9C';
+          partes = [cat?.nome || 'Sem categoria', nomeConta(m.conta_id)];
+          if (subNome) partes.splice(1, 0, subNome);
+        }
         return `
           <div class="mov-row" data-id="${m.id}" data-tipo="${m.tipo}">
-            <span class="mov-dot" style="background:${cat?.cor || '#8A9A9C'}"></span>
+            <span class="mov-dot" style="background:${corDot}"></span>
             <div class="mov-info">
               <div class="mov-desc">${m.descricao}</div>
               <div class="mov-sub">${partes.join(' · ')}</div>
@@ -246,7 +269,7 @@
     }).join('');
 
     container.querySelectorAll('.mov-row').forEach(row => {
-      row.addEventListener('click', () => abrirEdicao(row.dataset.id, row.dataset.tipo));
+      row.addEventListener('click', () => { abrirEdicao(row.dataset.id, row.dataset.tipo); });
     });
   }
 
@@ -276,9 +299,20 @@
     abrirFormulario();
   }
 
-  function abrirEdicao(id, tipo){
-    const m = movimentosGlobal.find(x => x.id === id && x.tipo === tipo);
-    if (!m) return;
+  async function abrirEdicao(id, tipo){
+    let dadosTransferencia = null;
+    if (tipo === 'transferencia') {
+      // uma transferência aparece 2x em vw_movimentos (um lado por conta) — vamos buscar o registo completo
+      const { data } = await flux.from('transferencias').select('*').eq('id', id).single();
+      if (!data) return;
+      dadosTransferencia = data;
+    } else {
+      const m = movimentosGlobal.find(x => x.id === id && x.tipo === tipo);
+      if (!m) return;
+      dadosTransferencia = m;
+    }
+    const m = dadosTransferencia;
+
     editandoId = id;
     tipoFormAtual = tipo;
     document.querySelectorAll('#tipoSegmented button').forEach(b => b.classList.toggle('active', b.dataset.tipo === tipo));
@@ -286,11 +320,18 @@
     document.getElementById('fDescricao').value = m.descricao;
     document.getElementById('fValor').value = String(m.valor).replace('.', ',');
     document.getElementById('fData').value = m.data;
-    document.getElementById('fConta').value = m.conta_id;
-    document.getElementById('fCategoria').value = m.categoria_id;
-    atualizarSelectSubcategoria();
-    if (m.subcategoria_id) document.getElementById('fSubcategoria').value = m.subcategoria_id;
     document.getElementById('fNotas').value = m.notas || '';
+
+    if (tipo === 'transferencia') {
+      document.getElementById('fConta').value = m.conta_origem_id;
+      document.getElementById('fContaDestino').value = m.conta_destino_id;
+    } else {
+      document.getElementById('fConta').value = m.conta_id;
+      document.getElementById('fCategoria').value = m.categoria_id;
+      atualizarSelectSubcategoria();
+      if (m.subcategoria_id) document.getElementById('fSubcategoria').value = m.subcategoria_id;
+    }
+
     document.getElementById('guardarMovBtn').textContent = 'Guardar alterações';
     abrirFormulario();
 
@@ -308,11 +349,16 @@
     document.getElementById('apagarMovBtn').style.display = '';
   }
 
+  function tabelaDoTipo(tipo){
+    if (tipo === 'despesa') return 'despesas';
+    if (tipo === 'receita') return 'receitas';
+    return 'transferencias';
+  }
+
   async function apagarMovimento(){
     if (!editandoId) return;
     if (!confirm('Apagar este movimento?')) return;
-    const tabela = tipoFormAtual === 'despesa' ? 'despesas' : 'receitas';
-    const { error } = await flux.from(tabela).delete().eq('id', editandoId);
+    const { error } = await flux.from(tabelaDoTipo(tipoFormAtual)).delete().eq('id', editandoId);
     if (error) { alert('Erro ao apagar.'); return; }
     fecharFormulario();
     carregarMovimentos();
@@ -323,20 +369,36 @@
     const valorTxt = euroInput(document.getElementById('fValor').value);
     const valor = parseFloat(valorTxt);
     const data = document.getElementById('fData').value;
-    const conta_id = document.getElementById('fConta').value;
-    const categoria_id = document.getElementById('fCategoria').value;
-    const subcategoria_id = document.getElementById('fSubcategoria').value || null;
     const notas = document.getElementById('fNotas').value.trim() || null;
 
-    if (!descricao || !valor || valor <= 0 || !data || !conta_id || !categoria_id) {
-      alert('Preenche descrição, valor, data, conta e categoria.');
+    if (!valor || valor <= 0 || !data) {
+      alert('Preenche valor e data.');
       return;
     }
 
-    const tabela = tipoFormAtual === 'despesa' ? 'despesas' : 'receitas';
-    const payload = { user_id: userIdGlobal, descricao, valor, data, conta_id, categoria_id, notas };
-    if (tipoFormAtual === 'despesa') payload.subcategoria_id = subcategoria_id;
+    let payload;
+    if (tipoFormAtual === 'transferencia') {
+      const conta_origem_id = document.getElementById('fConta').value;
+      const conta_destino_id = document.getElementById('fContaDestino').value;
+      if (!conta_origem_id || !conta_destino_id) { alert('Escolhe a conta de origem e a conta de destino.'); return; }
+      if (conta_origem_id === conta_destino_id) { alert('A conta de origem e a de destino têm de ser diferentes.'); return; }
+      payload = {
+        user_id: userIdGlobal, descricao: descricao || 'Transferência', valor, data,
+        conta_origem_id, conta_destino_id, notas
+      };
+    } else {
+      const conta_id = document.getElementById('fConta').value;
+      const categoria_id = document.getElementById('fCategoria').value;
+      const subcategoria_id = document.getElementById('fSubcategoria').value || null;
+      if (!descricao || !conta_id || !categoria_id) {
+        alert('Preenche descrição, conta e categoria.');
+        return;
+      }
+      payload = { user_id: userIdGlobal, descricao, valor, data, conta_id, categoria_id, notas };
+      if (tipoFormAtual === 'despesa') payload.subcategoria_id = subcategoria_id;
+    }
 
+    const tabela = tabelaDoTipo(tipoFormAtual);
     let error;
     if (editandoId) {
       ({ error } = await flux.from(tabela).update(payload).eq('id', editandoId));
