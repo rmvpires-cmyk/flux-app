@@ -85,7 +85,8 @@
   <!-- PASSO 3: rever transações -->
   <div id="stepReview" style="display:none;">
     <div class="review-summary" id="reviewSummary"></div>
-    <p class="empty-note">Desmarca o que não queres importar. Linhas cor de cobre parecem já existir — confirma antes de as incluir.</p>
+    <p class="empty-note">Desmarca o que não queres importar. Linhas cor de cobre parecem já existir — confirma antes de as incluir. As categorias já vêm sugeridas a partir de importações anteriores; o que não reconhecermos fica em "Outros" e podes corrigir depois em Movimentos.</p>
+    <div id="bulkApplyWrap"></div>
     <div class="review-list" id="reviewList"></div>
     <div class="add-form-actions" style="margin-top:16px;">
       <button class="btn-secondary" id="rVoltarBtn">Voltar</button>
@@ -394,19 +395,54 @@
   document.getElementById('mVoltarBtn').addEventListener('click', () => irParaPasso(1));
 
   // ---------- PASSO 3: revisão ----------
+  let regrasGlobais = [];
+
+  // Palavras genéricas de extratos bancários que nunca devem virar "palavra-chave" de uma regra
+  const PALAVRAS_GENERICAS = new Set([
+    'compra','pagamento','levantamento','transferencia','trf','tr','dp','nr','p','de','da','do','dos','das',
+    'ips','plc','cl','lda','unip','sa','ref','mb','mbway','via','directa','compania','companhia','conta',
+    'movimento','cartao','credito','debito','banco','doc','ordem','favor'
+  ]);
+
+  function extrairPalavraChave(descricao){
+    const tokens = normalizar(descricao)
+      .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+    for (const t of tokens) {
+      if (t.length < 4) continue;
+      if (/^\d+$/.test(t)) continue;
+      if (PALAVRAS_GENERICAS.has(t)) continue;
+      return t;
+    }
+    return null;
+  }
+
+  function encontrarRegra(descNorm, tipo){
+    let melhor = null;
+    regrasGlobais.forEach(r => {
+      if (r.tipo === tipo && descNorm.includes(r.padrao)) {
+        if (!melhor || r.padrao.length > melhor.padrao.length) melhor = r;
+      }
+    });
+    return melhor;
+  }
+
   async function prepararPassoRevisao(){
     const conta_id = contaSelecionada();
     const datas = transacoesBrutas.map(t => t.data).sort();
     const dataMin = datas[0], dataMax = datas[datas.length - 1];
 
-    const [{ data: catsDespesa }, { data: catsReceita }, { data: despesasExistentes }, { data: receitasExistentes }] = await Promise.all([
+    const [{ data: catsDespesa }, { data: catsReceita }, { data: despesasExistentes }, { data: receitasExistentes }, { data: regras }] = await Promise.all([
       flux.from('orcamento_categorias').select('id, nome').eq('user_id', userIdGlobal).eq('ativa', true).order('nome'),
       flux.from('receitas_categorias').select('id, nome').eq('user_id', userIdGlobal).eq('ativa', true).order('nome'),
       flux.from('despesas').select('data, valor, descricao').eq('user_id', userIdGlobal).eq('conta_id', conta_id).gte('data', dataMin).lte('data', dataMax),
-      flux.from('receitas').select('data, valor, descricao').eq('user_id', userIdGlobal).eq('conta_id', conta_id).gte('data', dataMin).lte('data', dataMax)
+      flux.from('receitas').select('data, valor, descricao').eq('user_id', userIdGlobal).eq('conta_id', conta_id).gte('data', dataMin).lte('data', dataMax),
+      flux.from('regras_categorizacao').select('tipo, padrao, categoria_id').eq('user_id', userIdGlobal)
     ]);
     despesaCategoriasGlobal = catsDespesa || [];
     receitaCategoriasGlobal = catsReceita || [];
+    regrasGlobais = regras || [];
 
     const chavesExistentes = new Set();
     (despesasExistentes || []).forEach(d => chavesExistentes.add(`${d.data}|${Number(d.valor).toFixed(2)}|${d.descricao.trim().toLowerCase()}`));
@@ -419,15 +455,56 @@
       const duplicado = chavesExistentes.has(chave);
       const listaCats = tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
       const descNorm = normalizar(t.descricao);
-      const catSugerida = listaCats.find(c => descNorm.includes(normalizar(c.nome)));
+
+      // 1º tenta uma regra aprendida de importações anteriores; 2º cai para correspondência pelo nome da categoria
+      const regra = encontrarRegra(descNorm, tipo);
+      let categoriaId = '';
+      if (regra) {
+        categoriaId = regra.categoria_id;
+      } else {
+        const catSugerida = listaCats.find(c => descNorm.includes(normalizar(c.nome)));
+        if (catSugerida) categoriaId = catSugerida.id;
+      }
+
       return {
         data: t.data, descricao: t.descricao, valor: valorAbs, tipo,
-        categoria_id: catSugerida ? catSugerida.id : '',
+        categoria_id: categoriaId,
         duplicado, incluir: !duplicado
       };
     }).sort((a, b) => a.data.localeCompare(b.data));
 
     renderRevisao();
+  }
+
+  function renderBulkApply(){
+    const wrap = document.getElementById('bulkApplyWrap');
+    const tipos = ['despesa', 'receita'].filter(tipo => itensRevisao.some(i => i.tipo === tipo && !i.categoria_id));
+    if (tipos.length === 0) { wrap.innerHTML = ''; return; }
+
+    wrap.innerHTML = tipos.map(tipo => {
+      const listaCats = tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
+      const n = itensRevisao.filter(i => i.tipo === tipo && !i.categoria_id).length;
+      const label = tipo === 'despesa' ? 'despesas' : 'receitas';
+      return `
+        <div class="bulk-apply-row">
+          <div class="bulk-label">${n} ${label} por categorizar — aplicar a todas de uma vez:</div>
+          <select class="bulkCatSelect" data-tipo="${tipo}">
+            <option value="">— escolher categoria —</option>
+            ${listaCats.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
+          </select>
+          <button type="button" class="bulkApplyBtn" data-tipo="${tipo}">Aplicar</button>
+        </div>`;
+    }).join('');
+
+    document.querySelectorAll('.bulkApplyBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tipo = btn.dataset.tipo;
+        const select = document.querySelector(`.bulkCatSelect[data-tipo="${tipo}"]`);
+        if (!select.value) { alert('Escolhe primeiro uma categoria.'); return; }
+        itensRevisao.forEach(i => { if (i.tipo === tipo && !i.categoria_id) i.categoria_id = select.value; });
+        renderRevisao();
+      });
+    });
   }
 
   function renderRevisao(){
@@ -462,19 +539,33 @@
       cb.addEventListener('change', () => { itensRevisao[Number(cb.dataset.i)].incluir = cb.checked; });
     });
     document.querySelectorAll('.catSelect').forEach(sel => {
-      sel.addEventListener('change', () => { itensRevisao[Number(sel.dataset.i)].categoria_id = sel.value; });
+      sel.addEventListener('change', () => { itensRevisao[Number(sel.dataset.i)].categoria_id = sel.value; renderBulkApply(); });
     });
+
+    renderBulkApply();
   }
 
   document.getElementById('rVoltarBtn').addEventListener('click', () => irParaPasso(formatoFicheiro === 'csv' ? 2 : 1));
 
+  // Garante uma categoria "Outros" para o tipo dado, criando-a se ainda não existir
+  const idsCategoriaOutros = {};
+  async function obterCategoriaOutros(tipo){
+    if (idsCategoriaOutros[tipo]) return idsCategoriaOutros[tipo];
+    const tabela = tipo === 'despesa' ? 'orcamento_categorias' : 'receitas_categorias';
+    const lista = tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
+    let outros = lista.find(c => normalizar(c.nome) === 'outros');
+    if (!outros) {
+      const { data, error } = await flux.from(tabela).insert({ user_id: userIdGlobal, nome: 'Outros', cor: '#8A9A9C' }).select().single();
+      if (error) return null;
+      outros = { id: data.id, nome: 'Outros' };
+      lista.push(outros);
+    }
+    idsCategoriaOutros[tipo] = outros.id;
+    return outros.id;
+  }
+
   document.getElementById('rConfirmarBtn').addEventListener('click', async () => {
     const incluidos = itensRevisao.filter(i => i.incluir);
-    const semCategoria = incluidos.filter(i => !i.categoria_id);
-    if (semCategoria.length > 0) {
-      alert(`${semCategoria.length} transação(ões) marcada(s) para importar ainda não têm categoria. Escolhe uma categoria para todas, ou desmarca-as.`);
-      return;
-    }
     if (incluidos.length === 0) {
       alert('Não marcaste nenhuma transação para importar.');
       return;
@@ -482,6 +573,14 @@
 
     const btn = document.getElementById('rConfirmarBtn');
     btn.disabled = true; btn.textContent = 'A importar…';
+
+    // Preenche automaticamente com "Outros" quem ficou sem categoria — nada bloqueia a importação;
+    // ajusta-se a categoria certa depois em Movimentos.
+    for (const item of incluidos) {
+      if (!item.categoria_id) {
+        item.categoria_id = await obterCategoriaOutros(item.tipo);
+      }
+    }
 
     const conta_id = contaSelecionada();
 
@@ -527,6 +626,22 @@
         categoria_sugerida_id: item.categoria_id || null,
         receita_id, despesa_id
       });
+    }
+
+    // Aprende regras a partir das categorias usadas nesta importação, para sugerir
+    // automaticamente da próxima vez (ignora o que caiu no "Outros" por omissão —
+    // isso não é um sinal fiável).
+    const regrasNovas = new Map();
+    itensRevisao.filter(i => i.incluir && i.categoria_id && i.categoria_id !== idsCategoriaOutros[i.tipo])
+      .forEach(item => {
+        const palavra = extrairPalavraChave(item.descricao);
+        if (!palavra) return;
+        regrasNovas.set(`${item.tipo}|${palavra}`, {
+          user_id: userIdGlobal, tipo: item.tipo, padrao: palavra, categoria_id: item.categoria_id
+        });
+      });
+    if (regrasNovas.size > 0) {
+      await flux.from('regras_categorizacao').upsert(Array.from(regrasNovas.values()), { onConflict: 'user_id,tipo,padrao' });
     }
 
     document.getElementById('doneResumo').innerHTML =

@@ -765,3 +765,37 @@ table.mapping-table select{
   padding: 16px 18px;
   margin-top: 14px;
 }
+
+/* APLICAR CATEGORIA EM MASSA (revisão de importação) */
+.bulk-apply-row{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  background: var(--current-soft);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.bulk-apply-row .bulk-label{ font-size: 12px; color: var(--ink-soft); flex: 1 1 100%; }
+.bulk-apply-row select{
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  background: var(--card);
+}
+.bulk-apply-row button{
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: var(--current);
+  color: white;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
