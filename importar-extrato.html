@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flux — Importar extrato</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="back-link" id="backLink" href="movimentos.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Voltar
+  </a>
+  <div class="greeting" style="margin-top:10px;">Importar extrato</div>
+</header>
+
+<main>
+  <div class="import-steps">
+    <div class="import-step-dot" data-step="1"></div>
+    <div class="import-step-dot" data-step="2"></div>
+    <div class="import-step-dot" data-step="3"></div>
+  </div>
+
+  <!-- PASSO 1: escolher conta + ficheiro -->
+  <div id="stepUpload">
+    <div class="add-form" style="margin-top:16px;" id="uContaWrap">
+      <div class="field">
+        <label>Conta a importar</label>
+        <select id="uConta"></select>
+      </div>
+    </div>
+    <p class="empty-note" id="uContaFixa" style="display:none;"></p>
+
+    <label class="upload-drop" id="uploadDrop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16"/></svg>
+      <div id="uploadDropTexto">Toca para escolher o ficheiro do extrato<br>(CSV ou PDF)</div>
+      <input type="file" id="uFicheiro" accept=".csv,application/pdf">
+    </label>
+
+    <p class="empty-note" id="uploadErro" style="color:var(--brick);"></p>
+  </div>
+
+  <!-- PASSO 2: mapear colunas (só CSV) -->
+  <div id="stepMapping" style="display:none;">
+    <div class="add-form" style="margin-top:16px;">
+      <div class="field">
+        <label>A primeira linha do ficheiro é cabeçalho?</label>
+        <select id="mHeader">
+          <option value="sim">Sim, é cabeçalho (não importar)</option>
+          <option value="nao">Não, já é a primeira transação</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Formato da data</label>
+        <select id="mDateFormat">
+          <option value="dmy">DD/MM/AAAA</option>
+          <option value="ymd">AAAA-MM-DD</option>
+          <option value="mdy">MM/DD/AAAA</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>O ficheiro tem…</label>
+        <select id="mValorMode">
+          <option value="unico">Uma coluna de valor (com sinal + / −)</option>
+          <option value="separado">Colunas separadas de Débito e Crédito</option>
+        </select>
+      </div>
+    </div>
+
+    <p class="empty-note">Indica o que representa cada coluna, a partir das primeiras linhas do ficheiro:</p>
+    <div class="mapping-table-wrap">
+      <table class="mapping-table" id="mappingTable"></table>
+    </div>
+
+    <div class="add-form-actions" style="margin-top:16px;">
+      <button class="btn-secondary" id="mVoltarBtn">Voltar</button>
+      <button class="btn-small-primary" id="mAnalisarBtn">Analisar ficheiro</button>
+    </div>
+  </div>
+
+  <!-- PASSO 3: rever transações -->
+  <div id="stepReview" style="display:none;">
+    <div class="review-summary" id="reviewSummary"></div>
+    <p class="empty-note">Desmarca o que não queres importar. Linhas cor de cobre parecem já existir — confirma antes de as incluir.</p>
+    <div class="review-list" id="reviewList"></div>
+    <div class="add-form-actions" style="margin-top:16px;">
+      <button class="btn-secondary" id="rVoltarBtn">Voltar</button>
+      <button class="btn-small-primary" id="rConfirmarBtn">Confirmar importação</button>
+    </div>
+  </div>
+
+  <!-- PASSO 4: concluído -->
+  <div id="stepDone" style="display:none;">
+    <div class="limit-card" style="text-align:center; margin-top:24px;">
+      <div class="limit-label">Importação concluída</div>
+      <div id="doneResumo" style="margin-top:10px; font-size:14px;"></div>
+      <a class="btn-primary" id="doneLink" style="display:block; margin-top:20px; text-decoration:none; text-align:center;" href="movimentos.html">Ver movimentos</a>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script>
+  // ---------- estado global ----------
+  let userIdGlobal = null;
+  let contasGlobal = [];
+  let despesaCategoriasGlobal = [];
+  let receitaCategoriasGlobal = [];
+  let ficheiroSelecionado = null;
+  let formatoFicheiro = null; // 'csv' | 'pdf'
+  let csvLinhas = [];         // array de arrays (bruto)
+  let transacoesBrutas = [];  // após mapeamento/IA: {data, descricao, valor(sinal)}
+  let itensRevisao = [];      // após deduplicação/sugestão de categoria
+
+  const params = new URLSearchParams(window.location.search);
+  const contaFixaId = params.get('conta');
+
+  function euros(v){
+    const n = Number(v || 0);
+    return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function normalizar(txt){
+    return (txt || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  function irParaPasso(n){
+    document.getElementById('stepUpload').style.display = n === 1 ? '' : 'none';
+    document.getElementById('stepMapping').style.display = n === 2 ? '' : 'none';
+    document.getElementById('stepReview').style.display = n === 3 ? '' : 'none';
+    document.getElementById('stepDone').style.display = n === 4 ? '' : 'none';
+    document.querySelectorAll('.import-step-dot').forEach(dot => {
+      const s = Number(dot.dataset.step);
+      dot.classList.toggle('active', s === Math.min(n, 3));
+      dot.classList.toggle('done', s < n);
+    });
+  }
+
+  // ---------- PASSO 1: upload ----------
+  async function carregarContas(){
+    const { data } = await flux.from('contas').select('id, nome').eq('user_id', userIdGlobal).eq('ativa', true).order('nome');
+    contasGlobal = data || [];
+
+    if (contaFixaId) {
+      const conta = contasGlobal.find(c => c.id === contaFixaId);
+      document.getElementById('uContaWrap').style.display = 'none';
+      const nota = document.getElementById('uContaFixa');
+      nota.style.display = '';
+      nota.textContent = conta ? `A importar para: ${conta.nome}` : 'Conta não encontrada.';
+      document.getElementById('backLink').href = `conta-detalhe.html?id=${contaFixaId}`;
+    } else {
+      document.getElementById('uConta').innerHTML = contasGlobal.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+      document.getElementById('backLink').href = 'movimentos.html';
+    }
+  }
+
+  function contaSelecionada(){ return contaFixaId || document.getElementById('uConta').value; }
+
+  document.getElementById('uFicheiro').addEventListener('change', async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    document.getElementById('uploadErro').textContent = '';
+    ficheiroSelecionado = file;
+    const nomeMin = file.name.toLowerCase();
+
+    if (nomeMin.endsWith('.csv') || file.type === 'text/csv') {
+      formatoFicheiro = 'csv';
+      const texto = await file.text();
+      const delim = detectarDelimitador(texto.split('\n')[0] || '');
+      csvLinhas = parseCSV(texto, delim);
+      if (csvLinhas.length === 0) {
+        document.getElementById('uploadErro').textContent = 'Não foi possível ler linhas neste CSV.';
+        return;
+      }
+      prepararPassoMapeamento();
+      irParaPasso(2);
+    } else if (nomeMin.endsWith('.pdf') || file.type === 'application/pdf') {
+      formatoFicheiro = 'pdf';
+      document.getElementById('uploadDropTexto').textContent = 'A ler o PDF com IA — pode demorar alguns segundos…';
+      try {
+        const base64 = await fileParaBase64(file);
+        const { data: { session } } = await flux.auth.getSession();
+        const resp = await fetch('/api/extrair-extrato', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          body: JSON.stringify({ pdfBase64: base64 })
+        });
+        const resultado = await resp.json();
+        if (!resp.ok) throw new Error(resultado.error || 'Erro desconhecido.');
+        transacoesBrutas = (resultado.transacoes || []).map(t => ({
+          data: t.data, descricao: t.descricao, valor: Number(t.valor)
+        })).filter(t => t.data && t.descricao && !isNaN(t.valor));
+        if (transacoesBrutas.length === 0) throw new Error('A IA não encontrou transações neste PDF.');
+        await prepararPassoRevisao();
+        irParaPasso(3);
+      } catch (e) {
+        document.getElementById('uploadDropTexto').textContent = 'Toca para escolher o ficheiro do extrato (CSV ou PDF)';
+        document.getElementById('uploadErro').textContent = 'Erro a ler o PDF: ' + e.message;
+      }
+    } else {
+      document.getElementById('uploadErro').textContent = 'Formato não suportado — usa CSV ou PDF.';
+    }
+  });
+
+  function detectarDelimitador(linha){
+    const candidatos = [',', ';', '\t'];
+    let melhor = ','; let max = -1;
+    candidatos.forEach(c => {
+      const n = linha.split(c).length;
+      if (n > max) { max = n; melhor = c; }
+    });
+    return melhor;
+  }
+
+  function parseCSV(texto, delim){
+    const linhas = [];
+    let linha = [], campo = '', dentroAspas = false;
+    for (let i = 0; i < texto.length; i++) {
+      const c = texto[i];
+      if (dentroAspas) {
+        if (c === '"') {
+          if (texto[i + 1] === '"') { campo += '"'; i++; } else { dentroAspas = false; }
+        } else campo += c;
+      } else {
+        if (c === '"') dentroAspas = true;
+        else if (c === delim) { linha.push(campo); campo = ''; }
+        else if (c === '\n') { linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
+        else if (c === '\r') { /* ignora */ }
+        else campo += c;
+      }
+    }
+    if (campo.length || linha.length) { linha.push(campo); linhas.push(linha); }
+    return linhas.filter(l => l.some(c => c.trim() !== ''));
+  }
+
+  function fileParaBase64(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ---------- PASSO 2: mapeamento CSV ----------
+  function prepararPassoMapeamento(){
+    const nCols = Math.max(...csvLinhas.slice(0, 6).map(l => l.length));
+    const mapeamentoGuardado = JSON.parse(localStorage.getItem(`flux_csv_mapping_${contaSelecionada()}`) || 'null');
+
+    document.getElementById('mHeader').value = mapeamentoGuardado?.header || 'sim';
+    document.getElementById('mDateFormat').value = mapeamentoGuardado?.dateFormat || 'dmy';
+    document.getElementById('mValorMode').value = mapeamentoGuardado?.valorMode || 'unico';
+
+    const opcoesUnico = ['ignorar', 'data', 'descricao', 'valor'];
+    const opcoesSeparado = ['ignorar', 'data', 'descricao', 'debito', 'credito'];
+    const nomes = { ignorar: '— ignorar —', data: 'Data', descricao: 'Descrição', valor: 'Valor (sinal)', debito: 'Débito', credito: 'Crédito' };
+
+    function gerarLinhaSelects(){
+      const opcoes = document.getElementById('mValorMode').value === 'unico' ? opcoesUnico : opcoesSeparado;
+      const colMap = mapeamentoGuardado?.colMap || [];
+      let html = '<tr>';
+      for (let c = 0; c < nCols; c++) {
+        const preSel = colMap[c] || 'ignorar';
+        html += `<th><select data-col="${c}" class="mapSelect">${opcoes.map(o => `<option value="${o}" ${o === preSel ? 'selected' : ''}>${nomes[o]}</option>`).join('')}</select></th>`;
+      }
+      html += '</tr>';
+      csvLinhas.slice(0, 5).forEach(linha => {
+        html += '<tr>' + Array.from({ length: nCols }, (_, c) => `<td>${(linha[c] ?? '').toString().slice(0, 24)}</td>`).join('') + '</tr>';
+      });
+      document.getElementById('mappingTable').innerHTML = html;
+    }
+    gerarLinhaSelects();
+    document.getElementById('mValorMode').onchange = gerarLinhaSelects;
+  }
+
+  function lerMapeamento(){
+    const selects = document.querySelectorAll('.mapSelect');
+    const colMap = {};
+    selects.forEach(s => { colMap[s.dataset.col] = s.value; });
+    return {
+      header: document.getElementById('mHeader').value,
+      dateFormat: document.getElementById('mDateFormat').value,
+      valorMode: document.getElementById('mValorMode').value,
+      colMap
+    };
+  }
+
+  function parseDataCampo(txt, formato){
+    if (!txt) return null;
+    const partes = txt.trim().split(/[\/\-\.]/);
+    if (partes.length !== 3) return null;
+    let d, m, y;
+    if (formato === 'dmy') [d, m, y] = partes;
+    else if (formato === 'mdy') [m, d, y] = partes;
+    else [y, m, d] = partes;
+    if (!d || !m || !y) return null;
+    if (y.length === 2) y = '20' + y;
+    d = d.padStart(2, '0'); m = m.padStart(2, '0'); y = y.padStart(4, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function parseValorCampo(txt){
+    if (txt == null) return null;
+    let s = String(txt).replace(/[€\s]/g, '').trim();
+    if (s === '') return null;
+    const negativo = /^-/.test(s) || /^\(.*\)$/.test(s);
+    s = s.replace(/[()]/g, '').replace(/^-/, '');
+    const ultimaVirgula = s.lastIndexOf(',');
+    const ultimoPonto = s.lastIndexOf('.');
+    let normalizado;
+    if (ultimaVirgula > ultimoPonto) normalizado = s.replace(/\./g, '').replace(',', '.');
+    else if (ultimoPonto > ultimaVirgula) normalizado = s.replace(/,/g, '');
+    else normalizado = s;
+    const n = parseFloat(normalizado);
+    if (isNaN(n)) return null;
+    return negativo ? -n : n;
+  }
+
+  document.getElementById('mAnalisarBtn').addEventListener('click', async () => {
+    const mapeamento = lerMapeamento();
+    localStorage.setItem(`flux_csv_mapping_${contaSelecionada()}`, JSON.stringify(mapeamento));
+
+    const indices = {};
+    Object.entries(mapeamento.colMap).forEach(([col, papel]) => { if (papel !== 'ignorar') indices[papel] = Number(col); });
+
+    if (indices.data === undefined || indices.descricao === undefined) {
+      alert('Indica pelo menos qual coluna é a Data e qual é a Descrição.');
+      return;
+    }
+    if (mapeamento.valorMode === 'unico' && indices.valor === undefined) {
+      alert('Indica qual coluna é o Valor.');
+      return;
+    }
+    if (mapeamento.valorMode === 'separado' && indices.debito === undefined && indices.credito === undefined) {
+      alert('Indica pelo menos a coluna de Débito ou de Crédito.');
+      return;
+    }
+
+    let linhas = csvLinhas;
+    if (mapeamento.header === 'sim') linhas = linhas.slice(1);
+
+    transacoesBrutas = [];
+    linhas.forEach(linha => {
+      const data = parseDataCampo(linha[indices.data], mapeamento.dateFormat);
+      const descricao = (linha[indices.descricao] || '').trim();
+      let valor = null;
+      if (mapeamento.valorMode === 'unico') {
+        valor = parseValorCampo(linha[indices.valor]);
+      } else {
+        const debito = indices.debito !== undefined ? parseValorCampo(linha[indices.debito]) : null;
+        const credito = indices.credito !== undefined ? parseValorCampo(linha[indices.credito]) : null;
+        if (credito) valor = Math.abs(credito);
+        else if (debito) valor = -Math.abs(debito);
+      }
+      if (data && descricao && valor !== null && valor !== 0 && !isNaN(valor)) {
+        transacoesBrutas.push({ data, descricao, valor });
+      }
+    });
+
+    if (transacoesBrutas.length === 0) {
+      alert('Não foi possível ler nenhuma transação com este mapeamento. Confirma as colunas escolhidas.');
+      return;
+    }
+    await prepararPassoRevisao();
+    irParaPasso(3);
+  });
+
+  document.getElementById('mVoltarBtn').addEventListener('click', () => irParaPasso(1));
+
+  // ---------- PASSO 3: revisão ----------
+  async function prepararPassoRevisao(){
+    const conta_id = contaSelecionada();
+    const datas = transacoesBrutas.map(t => t.data).sort();
+    const dataMin = datas[0], dataMax = datas[datas.length - 1];
+
+    const [{ data: catsDespesa }, { data: catsReceita }, { data: despesasExistentes }, { data: receitasExistentes }] = await Promise.all([
+      flux.from('orcamento_categorias').select('id, nome').eq('user_id', userIdGlobal).eq('ativa', true).order('nome'),
+      flux.from('receitas_categorias').select('id, nome').eq('user_id', userIdGlobal).eq('ativa', true).order('nome'),
+      flux.from('despesas').select('data, valor, descricao').eq('user_id', userIdGlobal).eq('conta_id', conta_id).gte('data', dataMin).lte('data', dataMax),
+      flux.from('receitas').select('data, valor, descricao').eq('user_id', userIdGlobal).eq('conta_id', conta_id).gte('data', dataMin).lte('data', dataMax)
+    ]);
+    despesaCategoriasGlobal = catsDespesa || [];
+    receitaCategoriasGlobal = catsReceita || [];
+
+    const chavesExistentes = new Set();
+    (despesasExistentes || []).forEach(d => chavesExistentes.add(`${d.data}|${Number(d.valor).toFixed(2)}|${d.descricao.trim().toLowerCase()}`));
+    (receitasExistentes || []).forEach(r => chavesExistentes.add(`${r.data}|${Number(r.valor).toFixed(2)}|${r.descricao.trim().toLowerCase()}`));
+
+    itensRevisao = transacoesBrutas.map(t => {
+      const tipo = t.valor >= 0 ? 'receita' : 'despesa';
+      const valorAbs = Math.abs(t.valor);
+      const chave = `${t.data}|${valorAbs.toFixed(2)}|${t.descricao.trim().toLowerCase()}`;
+      const duplicado = chavesExistentes.has(chave);
+      const listaCats = tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
+      const descNorm = normalizar(t.descricao);
+      const catSugerida = listaCats.find(c => descNorm.includes(normalizar(c.nome)));
+      return {
+        data: t.data, descricao: t.descricao, valor: valorAbs, tipo,
+        categoria_id: catSugerida ? catSugerida.id : '',
+        duplicado, incluir: !duplicado
+      };
+    }).sort((a, b) => a.data.localeCompare(b.data));
+
+    renderRevisao();
+  }
+
+  function renderRevisao(){
+    const nDup = itensRevisao.filter(i => i.duplicado).length;
+    document.getElementById('reviewSummary').innerHTML = `
+      <div class="stat"><div class="stat-label">Transações lidas</div><div class="stat-value">${itensRevisao.length}</div></div>
+      <div class="stat"><div class="stat-label">Possíveis duplicados</div><div class="stat-value">${nDup}</div></div>`;
+
+    document.getElementById('reviewList').innerHTML = itensRevisao.map((item, i) => {
+      const listaCats = item.tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
+      const sinal = item.tipo === 'receita' ? '+' : '−';
+      const dataFmt = new Date(item.data + 'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
+      return `
+        <div class="review-row ${item.duplicado ? 'dup' : ''}">
+          <input type="checkbox" data-i="${i}" class="incluirCheck" ${item.incluir ? 'checked' : ''}>
+          <div class="review-info">
+            <div class="review-desc">${item.descricao}</div>
+            <div class="review-meta">
+              ${dataFmt}
+              <select data-i="${i}" class="catSelect">
+                <option value="">— categoria —</option>
+                ${listaCats.map(c => `<option value="${c.id}" ${c.id === item.categoria_id ? 'selected' : ''}>${c.nome}</option>`).join('')}
+              </select>
+              ${item.duplicado ? '<span class="dup-badge">possível duplicado</span>' : ''}
+            </div>
+          </div>
+          <div class="review-amount" style="color:${item.tipo === 'receita' ? 'var(--moss)' : 'var(--brick)'}">${sinal}€${euros(item.valor)}</div>
+        </div>`;
+    }).join('');
+
+    document.querySelectorAll('.incluirCheck').forEach(cb => {
+      cb.addEventListener('change', () => { itensRevisao[Number(cb.dataset.i)].incluir = cb.checked; });
+    });
+    document.querySelectorAll('.catSelect').forEach(sel => {
+      sel.addEventListener('change', () => { itensRevisao[Number(sel.dataset.i)].categoria_id = sel.value; });
+    });
+  }
+
+  document.getElementById('rVoltarBtn').addEventListener('click', () => irParaPasso(formatoFicheiro === 'csv' ? 2 : 1));
+
+  document.getElementById('rConfirmarBtn').addEventListener('click', async () => {
+    const incluidos = itensRevisao.filter(i => i.incluir);
+    const semCategoria = incluidos.filter(i => !i.categoria_id);
+    if (semCategoria.length > 0) {
+      alert(`${semCategoria.length} transação(ões) marcada(s) para importar ainda não têm categoria. Escolhe uma categoria para todas, ou desmarca-as.`);
+      return;
+    }
+    if (incluidos.length === 0) {
+      alert('Não marcaste nenhuma transação para importar.');
+      return;
+    }
+
+    const btn = document.getElementById('rConfirmarBtn');
+    btn.disabled = true; btn.textContent = 'A importar…';
+
+    const conta_id = contaSelecionada();
+
+    // 1. Regista a importação
+    const { data: importacao, error: errImp } = await flux
+      .from('importacoes_extrato')
+      .insert({
+        user_id: userIdGlobal, conta_id,
+        ficheiro_url: ficheiroSelecionado?.name || 'importação',
+        formato: formatoFicheiro,
+        estado: 'processado',
+        processado_em: new Date().toISOString()
+      })
+      .select().single();
+    if (errImp) { alert('Erro ao registar importação: ' + errImp.message); btn.disabled = false; btn.textContent = 'Confirmar importação'; return; }
+
+    let importadas = 0, erros = 0;
+    for (const item of itensRevisao) {
+      const chave = `${conta_id}|${item.data}|${item.valor.toFixed(2)}|${item.descricao.trim().toLowerCase()}`;
+      let receita_id = null, despesa_id = null, estado = 'ignorada';
+
+      if (item.incluir) {
+        const tabela = item.tipo === 'despesa' ? 'despesas' : 'receitas';
+        const { data: novo, error: errMov } = await flux
+          .from(tabela)
+          .insert({ user_id: userIdGlobal, descricao: item.descricao, valor: item.valor, data: item.data, conta_id, categoria_id: item.categoria_id, origem: 'manual' })
+          .select().single();
+        if (errMov) { erros++; estado = 'ignorada'; }
+        else {
+          importadas++;
+          estado = 'confirmada';
+          if (item.tipo === 'despesa') despesa_id = novo.id; else receita_id = novo.id;
+        }
+      } else if (item.duplicado) {
+        estado = 'duplicada';
+      }
+
+      await flux.from('extrato_transacoes').insert({
+        user_id: userIdGlobal, importacao_id: importacao.id, conta_id,
+        data: item.data, descricao: item.descricao,
+        valor: item.tipo === 'receita' ? item.valor : -item.valor,
+        hash_deduplicacao: chave, estado,
+        categoria_sugerida_id: item.categoria_id || null,
+        receita_id, despesa_id
+      });
+    }
+
+    document.getElementById('doneResumo').innerHTML =
+      `${importadas} movimento(s) importado(s) com sucesso` + (erros > 0 ? `<br>${erros} com erro — confere em Movimentos` : '');
+    document.getElementById('doneLink').href = contaFixaId ? `conta-detalhe.html?id=${contaFixaId}` : 'movimentos.html';
+    irParaPasso(4);
+  });
+
+  // ---------- arranque ----------
+  (async () => {
+    userIdGlobal = await fluxRequireSession();
+    if (!userIdGlobal) return;
+    await carregarContas();
+    irParaPasso(1);
+  })();
+</script>
+
+</body>
+</html>

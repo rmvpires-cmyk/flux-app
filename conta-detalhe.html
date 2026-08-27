@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flux — Conta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="back-link" href="contas.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Contas
+  </a>
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px">
+    <div class="greeting" id="contaNome">…</div>
+    <div class="row-actions">
+      <button class="icon-btn" id="editBtn" aria-label="Editar conta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+      <button class="icon-btn danger" id="archiveBtn" aria-label="Arquivar conta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="eyebrow" id="contaTipo" style="margin-top:2px;"></div>
+</header>
+
+<main>
+  <div class="add-form" id="editForm" style="display:none;">
+    <div class="field">
+      <label>Nome</label>
+      <input type="text" id="eNome">
+    </div>
+    <div class="field">
+      <label>Tipo</label>
+      <select id="eTipo">
+        <option value="corrente">Conta à ordem</option>
+        <option value="poupanca">Poupança</option>
+        <option value="investimento">Investimento</option>
+        <option value="dinheiro">Dinheiro</option>
+        <option value="cartao_credito">Cartão de crédito</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>IBAN (opcional)</label>
+      <input type="text" id="eIban">
+    </div>
+    <div class="field">
+      <label>Cor</label>
+      <div class="color-swatches" id="corSwatches">
+        <div class="color-swatch" style="background:#1F6F78" data-cor="#1F6F78"></div>
+        <div class="color-swatch" style="background:#C97B4A" data-cor="#C97B4A"></div>
+        <div class="color-swatch" style="background:#4C8C6B" data-cor="#4C8C6B"></div>
+        <div class="color-swatch" style="background:#B5453D" data-cor="#B5453D"></div>
+        <div class="color-swatch" style="background:#4E6167" data-cor="#4E6167"></div>
+      </div>
+    </div>
+    <div class="add-form-actions">
+      <button class="btn-secondary" id="cancelarEditBtn">Cancelar</button>
+      <button class="btn-small-primary" id="guardarEditBtn">Guardar</button>
+    </div>
+  </div>
+
+  <div class="balance-card">
+    <div class="balance-label">Saldo atual</div>
+    <div class="balance-figure" id="saldoFigure">€0<span class="cents">,00</span></div>
+  </div>
+
+  <a class="import-link" id="importarLink" href="#" style="margin-top:16px;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16"/></svg>
+    Importar extrato bancário
+  </a>
+
+  <div class="section-head">
+    <div class="section-title">Movimentos recentes</div>
+    <a class="section-link" id="verTodosLink" href="#">ver todos →</a>
+  </div>
+  <div class="mov-list" id="movList">
+    <p class="empty-note">A carregar…</p>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script>
+  function euros(v){
+    const n = Number(v || 0);
+    return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function euroParts(v){
+    const [inteiro, cent] = euros(v).split(',');
+    return { inteiro, cent };
+  }
+
+  const nomesTipo = {
+    corrente: 'Conta à ordem', poupanca: 'Poupança', investimento: 'Investimento',
+    dinheiro: 'Dinheiro', cartao_credito: 'Cartão de crédito'
+  };
+
+  const params = new URLSearchParams(window.location.search);
+  const contaId = params.get('id');
+
+  let userIdGlobal = null;
+  let contaAtual = null;
+  let despesaCategoriasGlobal = [];
+  let receitaCategoriasGlobal = [];
+
+  document.getElementById('importarLink').href = `importar-extrato.html?conta=${contaId}`;
+  document.getElementById('verTodosLink').href = `movimentos.html?conta=${contaId}`;
+
+  async function carregarConta(){
+    const { data: conta } = await flux
+      .from('contas')
+      .select('id, nome, tipo, iban, cor, saldo_atual')
+      .eq('id', contaId)
+      .eq('user_id', userIdGlobal)
+      .single();
+
+    if (!conta) {
+      document.getElementById('contaNome').textContent = 'Conta não encontrada';
+      return;
+    }
+    contaAtual = conta;
+    document.getElementById('contaNome').textContent = conta.nome;
+    document.getElementById('contaTipo').textContent = nomesTipo[conta.tipo] || conta.tipo;
+    const { inteiro, cent } = euroParts(conta.saldo_atual);
+    document.getElementById('saldoFigure').innerHTML = `€${inteiro}<span class="cents">,${cent}</span>`;
+  }
+
+  async function carregarMovimentosRecentes(){
+    const hoje = new Date();
+    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
+    const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+    const [{ data: mov }, { data: catsD }, { data: catsR }] = await Promise.all([
+      flux.from('vw_movimentos').select('*').eq('user_id', userIdGlobal).eq('conta_id', contaId)
+        .gte('data', inicioMes).lte('data', fimMes)
+        .order('data', { ascending: false }).order('created_at', { ascending: false }).limit(10),
+      flux.from('orcamento_categorias').select('id, nome, cor').eq('user_id', userIdGlobal),
+      flux.from('receitas_categorias').select('id, nome, cor').eq('user_id', userIdGlobal)
+    ]);
+    despesaCategoriasGlobal = catsD || [];
+    receitaCategoriasGlobal = catsR || [];
+
+    const lista = document.getElementById('movList');
+    if (!mov || mov.length === 0) {
+      lista.innerHTML = '<p class="empty-note">Sem movimentos este mês nesta conta.</p>';
+      return;
+    }
+    lista.innerHTML = mov.map(m => {
+      const cats = m.tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
+      const cat = cats.find(c => c.id === m.categoria_id);
+      const sinal = m.tipo === 'receita' ? '+' : '−';
+      const classe = m.tipo === 'receita' ? 'pos' : 'neg';
+      const dataFmt = new Date(m.data + 'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
+      return `
+        <div class="mov-row" style="cursor:default;">
+          <span class="mov-dot" style="background:${cat?.cor || '#8A9A9C'}"></span>
+          <div class="mov-info">
+            <div class="mov-desc">${m.descricao}</div>
+            <div class="mov-sub">${cat?.nome || 'Sem categoria'} · ${dataFmt}</div>
+          </div>
+          <div class="mov-amount ${classe}">${sinal}€${euros(m.valor)}</div>
+        </div>`;
+    }).join('');
+  }
+
+  document.getElementById('editBtn').addEventListener('click', () => {
+    if (!contaAtual) return;
+    document.getElementById('eNome').value = contaAtual.nome;
+    document.getElementById('eTipo').value = contaAtual.tipo;
+    document.getElementById('eIban').value = contaAtual.iban || '';
+    document.querySelectorAll('#corSwatches .color-swatch').forEach(s =>
+      s.classList.toggle('selected', s.dataset.cor === (contaAtual.cor || '#1F6F78')));
+    document.getElementById('editForm').style.display = '';
+  });
+  document.getElementById('cancelarEditBtn').addEventListener('click', () => {
+    document.getElementById('editForm').style.display = 'none';
+  });
+  document.querySelectorAll('#corSwatches .color-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      document.querySelectorAll('#corSwatches .color-swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+    });
+  });
+  document.getElementById('guardarEditBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('eNome').value.trim();
+    const tipo = document.getElementById('eTipo').value;
+    const iban = document.getElementById('eIban').value.trim() || null;
+    const cor = document.querySelector('#corSwatches .color-swatch.selected')?.dataset.cor || '#1F6F78';
+    if (!nome) { alert('O nome não pode ficar vazio.'); return; }
+    const { error } = await flux.from('contas').update({ nome, tipo, iban, cor }).eq('id', contaId);
+    if (error) { alert('Erro ao guardar: ' + error.message); return; }
+    document.getElementById('editForm').style.display = 'none';
+    await carregarConta();
+  });
+
+  document.getElementById('archiveBtn').addEventListener('click', async () => {
+    if (!contaAtual) return;
+    if (!confirm(`Arquivar a conta "${contaAtual.nome}"? Deixa de aparecer nas listas, mas o histórico de movimentos mantém-se.`)) return;
+    const { error } = await flux.from('contas').update({ ativa: false }).eq('id', contaId);
+    if (error) { alert('Não foi possível arquivar: ' + error.message); return; }
+    window.location.href = 'contas.html';
+  });
+
+  (async () => {
+    userIdGlobal = await fluxRequireSession();
+    if (!userIdGlobal) return;
+    if (!contaId) {
+      document.getElementById('contaNome').textContent = 'Conta não encontrada';
+      return;
+    }
+    await carregarConta();
+    await carregarMovimentosRecentes();
+  })();
+</script>
+
+</body>
+</html>

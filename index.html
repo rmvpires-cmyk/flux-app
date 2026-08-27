@@ -42,6 +42,14 @@
   </div>
 
   <div class="section-head">
+    <div class="section-title">Contas</div>
+    <a class="section-link" href="contas.html">ver tudo →</a>
+  </div>
+  <div class="conta-list" id="contaListHome">
+    <div class="empty-note">A carregar…</div>
+  </div>
+
+  <div class="section-head">
     <div class="section-title">Orçamento por categoria</div>
     <a class="section-link" href="orcamento.html">ver tudo →</a>
   </div>
@@ -116,12 +124,34 @@
     // Saldo total das contas ativas
     const { data: contas } = await flux
       .from('contas')
-      .select('saldo_atual')
+      .select('id, nome, tipo, saldo_atual, cor')
       .eq('user_id', userId)
-      .eq('ativa', true);
+      .eq('ativa', true)
+      .order('created_at');
     const saldoTotal = (contas || []).reduce((s, c) => s + Number(c.saldo_atual), 0);
     const { inteiro, cent } = euroParts(saldoTotal);
     document.getElementById('balanceFigure').innerHTML = `€${inteiro}<span class="cents">,${cent}</span>`;
+
+    const nomesTipo = { corrente: 'Conta à ordem', poupanca: 'Poupança', investimento: 'Investimento', dinheiro: 'Dinheiro', cartao_credito: 'Cartão de crédito' };
+    const iniciaisTipo = { corrente: 'CO', poupanca: 'PO', investimento: 'IN', dinheiro: 'DI', cartao_credito: 'CC' };
+    const contaListHome = document.getElementById('contaListHome');
+    if (!contas || contas.length === 0) {
+      contaListHome.innerHTML = '<div class="empty-note">Ainda sem contas.</div>';
+    } else {
+      contaListHome.innerHTML = contas.map(c => {
+        const cor = c.cor || '#4E6167';
+        const negativo = Number(c.saldo_atual) < 0;
+        return `
+          <a class="conta-card" href="conta-detalhe.html?id=${c.id}">
+            <div class="conta-icon" style="background:${cor}">${iniciaisTipo[c.tipo] || '?'}</div>
+            <div class="conta-info">
+              <div class="conta-nome">${c.nome}</div>
+              <div class="conta-tipo">${nomesTipo[c.tipo] || c.tipo}</div>
+            </div>
+            <div class="conta-saldo ${negativo ? 'neg' : ''}">€${euros(c.saldo_atual)}</div>
+          </a>`;
+      }).join('');
+    }
 
     // Receitas/despesas do mês corrente
     const agora = new Date();

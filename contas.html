@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flux — Contas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="back-link" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Início
+  </a>
+  <div class="greeting" style="margin-top:10px;">Contas</div>
+</header>
+
+<main>
+  <div class="conta-total-card">
+    <div class="balance-label">Saldo total</div>
+    <div class="balance-figure" id="saldoTotalFigure">€0<span class="cents">,00</span></div>
+  </div>
+
+  <div class="conta-list" id="contaList" style="margin-top:16px;">
+    <p class="empty-note">A carregar…</p>
+  </div>
+
+  <button class="toggle-add-btn" id="toggleAddBtn">+ Nova conta</button>
+
+  <div class="add-form" id="contaForm" style="display:none;">
+    <div class="field">
+      <label>Nome</label>
+      <input type="text" id="fNome" placeholder="Ex: Conta à ordem">
+    </div>
+    <div class="field">
+      <label>Tipo</label>
+      <select id="fTipo">
+        <option value="corrente">Conta à ordem</option>
+        <option value="poupanca">Poupança</option>
+        <option value="investimento">Investimento</option>
+        <option value="dinheiro">Dinheiro</option>
+        <option value="cartao_credito">Cartão de crédito</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Saldo inicial (€)</label>
+      <input type="text" inputmode="decimal" id="fSaldoInicial" placeholder="0,00">
+    </div>
+    <div class="field">
+      <label>IBAN (opcional)</label>
+      <input type="text" id="fIban" placeholder="PT50…">
+    </div>
+    <div class="field">
+      <label>Cor</label>
+      <div class="color-swatches" id="corSwatches">
+        <div class="color-swatch selected" style="background:#1F6F78" data-cor="#1F6F78"></div>
+        <div class="color-swatch" style="background:#C97B4A" data-cor="#C97B4A"></div>
+        <div class="color-swatch" style="background:#4C8C6B" data-cor="#4C8C6B"></div>
+        <div class="color-swatch" style="background:#B5453D" data-cor="#B5453D"></div>
+        <div class="color-swatch" style="background:#4E6167" data-cor="#4E6167"></div>
+      </div>
+    </div>
+    <div class="add-form-actions">
+      <button class="btn-secondary" id="cancelarBtn">Cancelar</button>
+      <button class="btn-small-primary" id="guardarBtn">Criar conta</button>
+    </div>
+  </div>
+</main>
+
+<nav class="tabbar">
+  <a class="tab active" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+    Início
+  </a>
+  <a class="tab" href="orcamento.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9M3 12h9V3"/></svg>
+    Orçamento
+  </a>
+  <div class="tab spacer"></div>
+  <a class="tab" href="calendario.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+    Calendário
+  </a>
+  <a class="tab" href="movimentos.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></svg>
+    Movimentos
+  </a>
+</nav>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script>
+  function euros(v){
+    const n = Number(v || 0);
+    return n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function euroParts(v){
+    const [inteiro, cent] = euros(v).split(',');
+    return { inteiro, cent };
+  }
+  function euroInput(v){ return String(v).replace(',', '.').trim(); }
+
+  const nomesTipo = {
+    corrente: 'Conta à ordem', poupanca: 'Poupança', investimento: 'Investimento',
+    dinheiro: 'Dinheiro', cartao_credito: 'Cartão de crédito'
+  };
+  function iniciaisTipo(tipo){
+    return { corrente: 'CO', poupanca: 'PO', investimento: 'IN', dinheiro: 'DI', cartao_credito: 'CC' }[tipo] || '?';
+  }
+
+  let userIdGlobal = null;
+
+  async function carregarContas(){
+    const { data } = await flux
+      .from('contas')
+      .select('id, nome, tipo, saldo_atual, cor')
+      .eq('user_id', userIdGlobal)
+      .eq('ativa', true)
+      .order('created_at');
+
+    const contas = data || [];
+    const saldoTotal = contas.reduce((s, c) => s + Number(c.saldo_atual), 0);
+    const { inteiro, cent } = euroParts(saldoTotal);
+    document.getElementById('saldoTotalFigure').innerHTML = `€${inteiro}<span class="cents">,${cent}</span>`;
+
+    const lista = document.getElementById('contaList');
+    if (contas.length === 0) {
+      lista.innerHTML = '<p class="empty-note">Ainda sem contas.</p>';
+      return;
+    }
+    lista.innerHTML = contas.map(c => {
+      const cor = c.cor || '#4E6167';
+      const negativo = Number(c.saldo_atual) < 0;
+      return `
+        <a class="conta-card" href="conta-detalhe.html?id=${c.id}">
+          <div class="conta-icon" style="background:${cor}">${iniciaisTipo(c.tipo)}</div>
+          <div class="conta-info">
+            <div class="conta-nome">${c.nome}</div>
+            <div class="conta-tipo">${nomesTipo[c.tipo] || c.tipo}</div>
+          </div>
+          <div class="conta-saldo ${negativo ? 'neg' : ''}">€${euros(c.saldo_atual)}</div>
+        </a>`;
+    }).join('');
+  }
+
+  function abrirFormulario(){
+    document.getElementById('contaForm').style.display = '';
+    document.getElementById('toggleAddBtn').style.display = 'none';
+  }
+  function fecharFormulario(){
+    document.getElementById('contaForm').style.display = 'none';
+    document.getElementById('toggleAddBtn').style.display = '';
+    document.getElementById('fNome').value = '';
+    document.getElementById('fSaldoInicial').value = '';
+    document.getElementById('fIban').value = '';
+    document.getElementById('fTipo').value = 'corrente';
+  }
+
+  async function criarConta(){
+    const nome = document.getElementById('fNome').value.trim();
+    const tipo = document.getElementById('fTipo').value;
+    const saldoTxt = euroInput(document.getElementById('fSaldoInicial').value || '0');
+    const saldo_inicial = saldoTxt === '' ? 0 : parseFloat(saldoTxt);
+    const iban = document.getElementById('fIban').value.trim() || null;
+    const cor = document.querySelector('#corSwatches .color-swatch.selected')?.dataset.cor || '#1F6F78';
+
+    if (!nome || isNaN(saldo_inicial)) {
+      alert('Preenche pelo menos o nome e um saldo inicial válido.');
+      return;
+    }
+
+    const { error } = await flux.from('contas').insert({
+      user_id: userIdGlobal, nome, tipo, saldo_inicial, iban, cor
+    });
+    if (error) { alert('Erro ao criar conta: ' + error.message); return; }
+    fecharFormulario();
+    carregarContas();
+  }
+
+  (async () => {
+    userIdGlobal = await fluxRequireSession();
+    if (!userIdGlobal) return;
+    await carregarContas();
+
+    document.getElementById('toggleAddBtn').addEventListener('click', abrirFormulario);
+    document.getElementById('cancelarBtn').addEventListener('click', fecharFormulario);
+    document.getElementById('guardarBtn').addEventListener('click', criarConta);
+    document.querySelectorAll('#corSwatches .color-swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        document.querySelectorAll('#corSwatches .color-swatch').forEach(s => s.classList.remove('selected'));
+        sw.classList.add('selected');
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>

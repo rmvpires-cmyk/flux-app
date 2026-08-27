@@ -562,3 +562,206 @@ table.budget-grid td.cell.warn .g{ color: var(--copper); }
 }
 .auth-msg.error{ background: var(--brick-soft); color: var(--brick); }
 .auth-msg.ok{ background: var(--moss-soft); color: var(--moss); }
+
+/* ============================================================
+   MOVIMENTOS
+   ============================================================ */
+.import-link{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--current);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+}
+.import-link svg{ width: 16px; height: 16px; }
+
+.filter-bar{ margin-top: 16px; display:flex; flex-direction:column; gap: 10px; }
+.filter-row{ display:flex; gap: 8px; }
+.filter-select{
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.search-input{
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+
+.mov-day-label{
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  margin: 18px 2px 8px;
+}
+.mov-list{ display:flex; flex-direction:column; gap: 8px; }
+.mov-row{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  cursor: pointer;
+}
+.mov-row:hover{ background: var(--paper-2); }
+.mov-dot{ width: 10px; height: 10px; border-radius: 50%; flex-shrink:0; }
+.mov-info{ flex:1; min-width:0; }
+.mov-desc{ font-size: 13.5px; font-weight: 500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mov-sub{ font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mov-amount{ font-family: var(--font-mono); font-size: 14px; font-weight: 600; flex-shrink:0; }
+.mov-amount.pos{ color: var(--moss); }
+.mov-amount.neg{ color: var(--brick); }
+
+.segmented{ display:flex; border: 1px solid var(--line); border-radius: 10px; overflow:hidden; }
+.segmented button{
+  flex:1;
+  padding: 10px;
+  border: none;
+  background: var(--card);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.segmented button + button{ border-left: 1px solid var(--line); }
+.segmented button.active{ background: var(--current); color: white; }
+
+.add-form select{
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  background: var(--card);
+  color: var(--ink);
+}
+
+/* ============================================================
+   IMPORTAR EXTRATO
+   ============================================================ */
+.import-steps{ display:flex; justify-content:center; gap: 8px; margin-top: 14px; }
+.import-step-dot{
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--paper-2);
+}
+.import-step-dot.active{ background: var(--current); }
+.import-step-dot.done{ background: var(--moss); }
+
+.upload-drop{
+  margin-top: 18px;
+  border: 2px dashed var(--ink-faint);
+  border-radius: 18px;
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+  cursor: pointer;
+}
+.upload-drop svg{ width: 28px; height: 28px; margin-bottom: 8px; color: var(--current); }
+.upload-drop input[type=file]{ display:none; }
+
+.mapping-table-wrap{ overflow-x:auto; margin-top: 14px; border-radius: 14px; border: 1px solid var(--line); }
+table.mapping-table{ border-collapse: collapse; font-size: 11.5px; width:100%; }
+table.mapping-table th, table.mapping-table td{
+  padding: 7px 9px; text-align:left; white-space:nowrap; border-bottom: 1px solid var(--line);
+}
+table.mapping-table th{ background: var(--paper-2); font-family: var(--font-mono); font-size: 10px; color: var(--ink-soft); }
+table.mapping-table select{
+  font-size: 10.5px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--font-mono);
+}
+
+.review-summary{
+  display:flex; gap: 14px; margin-top: 14px; padding: 14px 16px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+}
+.review-summary .stat-label{ font-size: 11px; }
+.review-summary .stat-value{ font-size: 15px; }
+
+.review-list{ display:flex; flex-direction:column; gap: 6px; margin-top: 14px; }
+.review-row{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display:flex;
+  align-items:center;
+  gap: 10px;
+}
+.review-row.dup{ border-color: var(--copper); background: var(--copper-soft); }
+.review-row input[type=checkbox]{ width: 17px; height: 17px; flex-shrink:0; accent-color: var(--current); }
+.review-row .review-info{ flex:1; min-width:0; }
+.review-row .review-desc{ font-size: 13px; font-weight: 500; }
+.review-row .review-meta{ font-size: 11px; color: var(--ink-soft); margin-top: 2px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.review-row select{
+  font-size: 11px; padding: 5px 6px; border-radius: 7px; border: 1px solid var(--line); font-family: var(--font-body);
+  max-width: 118px;
+}
+.review-row .review-amount{ font-family: var(--font-mono); font-size: 13px; font-weight:600; flex-shrink:0; }
+.dup-badge{
+  font-family: var(--font-mono); font-size: 9.5px; text-transform:uppercase; letter-spacing:0.03em;
+  background: var(--copper); color:white; border-radius: 6px; padding: 2px 6px;
+}
+
+/* ============================================================
+   CONTAS
+   ============================================================ */
+.conta-list{ display:flex; flex-direction:column; gap: 10px; }
+.conta-card{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display:flex;
+  align-items:center;
+  gap: 14px;
+  text-decoration:none;
+  color: inherit;
+}
+.conta-card:hover{ background: var(--paper-2); }
+.conta-icon{
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display:flex; align-items:center; justify-content:center;
+  color: white;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.conta-info{ flex:1; min-width:0; }
+.conta-nome{ font-size: 14px; font-weight: 500; }
+.conta-tipo{ font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+.conta-saldo{ font-family: var(--font-mono); font-size: 14px; font-weight: 600; flex-shrink:0; }
+.conta-saldo.neg{ color: var(--brick); }
+
+.conta-total-card{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  margin-top: 14px;
+}
