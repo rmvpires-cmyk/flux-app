@@ -338,8 +338,9 @@
     receitaCategoriasGlobal.forEach(cat => {
       const previsoes = calcularValoresDoAno(Number(cat.valor_previsto), previsoesPorCategoriaGlobal[cat.id] || [], 'valor_previsto');
       let linha = `<tr><td class="cat-name" style="cursor:default">
+        <div class="cat-name-inner">
           <span>${cat.nome}</span>
-          <span class="row-actions" style="margin-left:8px; display:inline-flex; vertical-align:middle;">
+          <span class="row-actions">
             <button class="icon-btn edit-receita-cat-btn" data-id="${cat.id}" data-nome="${cat.nome}" data-previsto="${cat.valor_previsto}" aria-label="Editar" style="width:22px;height:22px;">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </button>
@@ -347,6 +348,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>
             </button>
           </span>
+        </div>
         </td>`;
       for (let m = 0; m < 12; m++) {
         const mesStr = String(m + 1).padStart(2, '0');
