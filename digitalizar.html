@@ -159,6 +159,45 @@
     });
   }
 
+  // Fotos tiradas direto da câmara do telemóvel costumam vir com vários MB —
+  // e a Anthropic recusa imagens acima de 10 MB. Reduzimos aqui no browser
+  // antes de enviar (o ficheiro original, sem perdas, continua a ser o que
+  // fica guardado no storage — só o que vai para a IA é que é mais pequeno).
+  async function comprimirImagemParaBase64(file, maxLado = 1600, qualidadeInicial = 0.82){
+    const bitmap = await (window.createImageBitmap
+      ? createImageBitmap(file, { imageOrientation: 'from-image' })
+      : new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = URL.createObjectURL(file);
+        }));
+
+    let largura = bitmap.width, altura = bitmap.height;
+    const maiorLado = Math.max(largura, altura);
+    if (maiorLado > maxLado) {
+      const escala = maxLado / maiorLado;
+      largura = Math.round(largura * escala);
+      altura = Math.round(altura * escala);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = largura; canvas.height = altura;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, largura, altura);
+
+    const LIMITE_BYTES = 9 * 1024 * 1024; // margem abaixo do limite de 10 MB da API
+    let qualidade = qualidadeInicial;
+    for (let tentativa = 0; tentativa < 5; tentativa++) {
+      const dataUrl = canvas.toDataURL('image/jpeg', qualidade);
+      const base64 = dataUrl.split(',')[1];
+      const bytesAprox = base64.length * 0.75;
+      if (bytesAprox <= LIMITE_BYTES || qualidade <= 0.35) {
+        return base64;
+      }
+      qualidade -= 0.15;
+    }
+  }
+
   async function carregarBaseDados(){
     const [{ data: contas }, { data: cats }, { data: subcats }, { data: regras }] = await Promise.all([
       flux.from('contas').select('id, nome').eq('user_id', userIdGlobal).eq('ativa', true).order('nome'),
@@ -185,17 +224,30 @@
     const file = ev.target.files[0];
     if (!file) return;
     document.getElementById('uploadErro').textContent = '';
-    ficheiroSelecionado = file;
+    ficheiroSelecionado = file; // ficheiro original, sem compressão — é este que fica guardado
     ficheiroMediaType = file.type === 'application/pdf' ? 'application/pdf' : (file.type || 'image/jpeg');
     document.getElementById('uploadDropTexto').textContent = 'A ler com IA — pode demorar alguns segundos…';
 
     try {
-      ficheiroBase64 = await fileParaBase64(file);
+      let base64ParaIA, mediaTypeParaIA;
+      if (ficheiroMediaType === 'application/pdf') {
+        base64ParaIA = await fileParaBase64(file);
+        mediaTypeParaIA = ficheiroMediaType;
+        const bytesAprox = base64ParaIA.length * 0.75;
+        if (bytesAprox > 10 * 1024 * 1024) {
+          throw new Error('O PDF é demasiado grande (máx. 10 MB). Tenta um ficheiro mais pequeno.');
+        }
+      } else {
+        base64ParaIA = await comprimirImagemParaBase64(file);
+        mediaTypeParaIA = 'image/jpeg';
+      }
+      ficheiroBase64 = base64ParaIA;
+
       const { data: { session } } = await flux.auth.getSession();
       const resp = await fetch('/api/extrair-fatura', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-        body: JSON.stringify({ ficheiroBase64, mediaType: ficheiroMediaType })
+        body: JSON.stringify({ ficheiroBase64: base64ParaIA, mediaType: mediaTypeParaIA })
       });
       const resultado = await resp.json();
       if (!resp.ok) throw new Error(resultado.error || 'Erro desconhecido.');
