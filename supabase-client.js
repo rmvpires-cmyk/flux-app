@@ -8,6 +8,14 @@ const flux = window.supabase.createClient(
   window.FLUX_CONFIG.SUPABASE_ANON_KEY
 );
 
+// Regista o service worker (torna o Flux instalável como app no telemóvel).
+// Não guarda dados financeiros em cache — só o "shell" da app (html/css/js).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
 // Garante que há sessão ativa; se não houver, manda para o login.
 // Se este aparelho tiver o cadeado por biometria ativado para este utilizador,
 // bloqueia o ecrã até confirmar a biometria antes de devolver o user_id — mas só
