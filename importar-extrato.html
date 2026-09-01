@@ -195,11 +195,33 @@
       formatoFicheiro = 'csv'; // a BD só distingue csv/pdf — folha de cálculo segue o mesmo caminho do csv
       try {
         const buffer = await file.arrayBuffer();
-        const livro = XLSX.read(buffer, { type: 'array' });
-        const folha = livro.Sheets[livro.SheetNames[0]];
-        csvLinhas = XLSX.utils.sheet_to_json(folha, { header: 1, raw: false, defval: '' })
-          .map(linha => linha.map(c => (c == null ? '' : String(c))))
-          .filter(l => l.some(c => c.trim() !== ''));
+
+        // Muitos extratos de bancos portugueses (ex: exportações "Net24") vêm com
+        // extensão .xls mas são na verdade texto simples delimitado por tabs — não um
+        // ficheiro Excel binário real. Quando se dá esse texto ao SheetJS, a biblioteca
+        // tenta adivinhar quais colunas são datas e reformata-as sozinha — e para datas
+        // ambíguas (dia ≤ 12, ex. "01/08/2026") interpreta-as por vezes como MM/DD em
+        // vez de DD/MM, trocando o dia com o mês silenciosamente. Para evitar isso,
+        // só usamos o SheetJS quando o ficheiro é mesmo um Excel binário (verificado
+        // pela assinatura de bytes); caso contrário tratamos como texto delimitado,
+        // tal como um .csv normal — sem qualquer interpretação automática de datas.
+        const bytes = new Uint8Array(buffer.slice(0, 8));
+        const ehOLE = bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0; // .xls binário
+        const ehZIP = bytes[0] === 0x50 && bytes[1] === 0x4B; // .xlsx (é um zip)
+
+        if (ehOLE || ehZIP) {
+          const livro = XLSX.read(buffer, { type: 'array' });
+          const folha = livro.Sheets[livro.SheetNames[0]];
+          csvLinhas = XLSX.utils.sheet_to_json(folha, { header: 1, raw: false, defval: '' })
+            .map(linha => linha.map(c => (c == null ? '' : String(c))))
+            .filter(l => l.some(c => c.trim() !== ''));
+        } else {
+          const texto = new TextDecoder('utf-8').decode(buffer);
+          const textoOk = texto.includes('�') ? new TextDecoder('iso-8859-1').decode(buffer) : texto;
+          const delim = detectarDelimitador(textoOk.split('\n')[0] || '');
+          csvLinhas = parseCSV(textoOk, delim);
+        }
+
         if (csvLinhas.length === 0) {
           document.getElementById('uploadErro').textContent = 'Não foi possível ler linhas nesta folha de cálculo.';
           return;
@@ -524,7 +546,12 @@
     document.getElementById('reviewList').innerHTML = itensRevisao.map((item, i) => {
       const listaCats = item.tipo === 'despesa' ? despesaCategoriasGlobal : receitaCategoriasGlobal;
       const sinal = item.tipo === 'receita' ? '+' : '−';
-      const dataFmt = new Date(item.data + 'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
+      // Formatação manual (dd/mm) em vez de toLocaleDateString: em alguns browsers móveis
+      // (ex: Opera Android) o Intl.DateTimeFormat com month:'short' cai para um formato
+      // numérico mal calculado (mês a 0-index, ex. agosto mostrado como "07"), fazendo
+      // parecer que a data foi lida errada quando na verdade só a apresentação estava mal.
+      const [anoItem, mesItem, diaItem] = item.data.split('-');
+      const dataFmt = `${Number(diaItem)}/${mesItem}`;
       return `
         <div class="review-row ${item.duplicado ? 'dup' : ''}">
           <input type="checkbox" data-i="${i}" class="incluirCheck" ${item.incluir ? 'checked' : ''}>
